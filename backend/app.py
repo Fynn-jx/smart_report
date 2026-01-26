@@ -1249,7 +1249,6 @@ def translate_image():
 
 
 # ============= 主程序 ============
-
 if __name__ == '__main__':
     """
     启动 Flask 服务器
@@ -1259,7 +1258,12 @@ if __name__ == '__main__':
     print("Dify API Backend Server")
     print("=" * 60)
     print(f"App ID: {APP_ID}")
-    print(f"Server running at: http://127.0.0.1:{BACKEND_PORT}")
+    
+    port = int(os.environ.get('PORT', BACKEND_PORT))
+    host = '0.0.0.0'
+    debug = os.environ.get('FLASK_ENV') != 'production'
+    
+    print(f"Server running at: http://{host}:{port}")
     print("=" * 60)
     print("\n可用接口:")
     print("  - GET  /health - 健康检查")
@@ -1273,4 +1277,4 @@ if __name__ == '__main__':
     print("=" * 60)
     print()
 
-    app.run(host='127.0.0.1', port=BACKEND_PORT, debug=True)
+    app.run(host=host, port=port, debug=debug)
