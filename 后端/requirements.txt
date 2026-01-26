@@ -1,0 +1,18 @@
+# Python 依赖管理文件
+# 这个文件列出了项目需要的所有 Python 包
+# 使用 pip install -r requirements.txt 可以一键安装所有依赖
+
+# Flask - 轻量级 Web 框架，用于创建 API 服务器
+Flask==3.0.0
+
+# Flask-CORS - 处理跨域请求，让前端页面可以访问这个 API
+flask-cors==4.0.0
+
+# Pillow - Python 图片处理库，用于图片的打开、转换、缩放等操作
+Pillow==10.1.0
+
+# requests - HTTP 请求库，用于下载 API 返回的图片 URL
+requests==2.31.0
+
+# openai - OpenAI 的官方 Python SDK，用于调用 OpenRouter API
+openai==1.12.0
