@@ -295,10 +295,10 @@ class OpenAIClient:
                             if v.startswith("http") or v.startswith("data:image"):
                                 add_from_str(v)
                     add_from_str(v)
-                elif isinstance(v, dict):
-                    if "url" in v and isinstance(v["url"], str):
-                        add_from_str(v["url"])
-                walk(v)
+                    if isinstance(v, dict):
+                        if "url" in v and isinstance(v["url"], str):
+                            add_from_str(v["url"])
+                        walk(v)
             elif isinstance(x, list):
                 for v in x:
                     walk(v)
