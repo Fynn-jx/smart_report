@@ -342,7 +342,7 @@ def init_dify_client():
 
 def init_openai_client():
     """初始化OpenAI API客户端（图片翻译）"""
-    return OpenAI(base_url=OPENAI_API_URL, api_key=OPENAI_API_KEY)
+    return OpenAIClient(OPENAI_API_KEY, OPENAI_API_URL)
 
 
 def load_and_preprocess_image(image_file):
