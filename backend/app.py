@@ -266,6 +266,8 @@ class OpenAIClient:
         seen = set()
 
         def add_http(url):
+            if not isinstance(url, str):
+                return
             u = url.strip()
             if u.endswith((")", "]", "}", ",")):
                 u = u.rstrip(")]},")
@@ -281,6 +283,8 @@ class OpenAIClient:
                 items.append({"type": "data", "url": None, "fmt": fmt.lower(), "b64": b64})
 
         def add_from_str(s):
+            if not isinstance(s, str):
+                return
             for m in re.findall(r"https?://\S+", s):
                 add_http(m)
             for m in re.findall(r"!\[[^\]]*\]\((https?://[^\)]+)\)", s):
