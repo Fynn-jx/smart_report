@@ -221,6 +221,7 @@ class OpenAIClient:
     def __init__(self, api_key, base_url="https://openrouter.ai/api/v1"):
         self.api_key = api_key
         self.base_url = base_url
+        self.client = OpenAI(base_url=base_url, api_key=api_key)
 
     def translate_image(self, image_b64):
         """调用OpenAI API进行图片翻译"""
