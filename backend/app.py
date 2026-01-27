@@ -727,15 +727,11 @@ def translate_document():
             write_log(f"输出类型: {type(output)}")
             write_log(f"输出内容: {output}")
             
+            translated_content = ''
             if isinstance(output, str):
                 write_log(f"检测到文本输出，直接使用")
                 translated_content = output
             else:
-                write_log(f"输出类型: {output.get('type')}")
-                write_log(f"输出数据: {output.get('data')}")
-                write_log(f"输出完整对象: {json.dumps(output, ensure_ascii=False)}")
-                
-                translated_content = ''
                 if output.get('type') == 'document':
                     translated_content = output.get('data', '')
                     write_log(f"文档类型输出，URL: {translated_content}")
@@ -765,12 +761,16 @@ def translate_document():
                     write_log(f"找到输出: {json.dumps(output, ensure_ascii=False)}")
                     
                     translated_content = ''
-                    if output.get('type') == 'document':
-                        translated_content = output.get('data', '')
-                    elif output.get('type') == 'text':
-                        translated_content = output.get('data', '')
-                    elif 'data' in output:
-                        translated_content = output.get('data', '')
+                    if isinstance(output, str):
+                        write_log(f"检测到文本输出，直接使用")
+                        translated_content = output
+                    else:
+                        if output.get('type') == 'document':
+                            translated_content = output.get('data', '')
+                        elif output.get('type') == 'text':
+                            translated_content = output.get('data', '')
+                        elif 'data' in output:
+                            translated_content = output.get('data', '')
                     
                     if translated_content:
                         write_log(f"✓ 从历史数据中找到输出，返回成功，翻译内容长度: {len(translated_content)}")
@@ -945,6 +945,7 @@ def generate_country_report():
             write_log(f"输出类型: {type(output)}")
             write_log(f"输出内容: {output}")
 
+            report_content = ''
             if isinstance(output, str):
                 write_log(f"检测到文本输出，直接使用")
                 report_content = output
@@ -953,18 +954,17 @@ def generate_country_report():
                 write_log(f"输出数据: {output.get('data')}")
                 write_log(f"输出完整对象: {json.dumps(output, ensure_ascii=False)}")
 
-            report_content = ''
-            if output.get('type') == 'document':
-                report_content = output.get('data', '')
-                write_log(f"文档类型输出，URL: {report_content}")
-            elif output.get('type') == 'text':
-                report_content = output.get('data', '')
-                write_log(f"文本类型输出，内容: {report_content}")
-            elif 'data' in output:
-                report_content = output.get('data', '')
-                write_log(f"通用数据输出，内容: {report_content}")
-            else:
-                write_log(f"未知输出类型，输出对象: {output}")
+                if output.get('type') == 'document':
+                    report_content = output.get('data', '')
+                    write_log(f"文档类型输出，URL: {report_content}")
+                elif output.get('type') == 'text':
+                    report_content = output.get('data', '')
+                    write_log(f"文本类型输出，内容: {report_content}")
+                elif 'data' in output:
+                    report_content = output.get('data', '')
+                    write_log(f"通用数据输出，内容: {report_content}")
+                else:
+                    write_log(f"未知输出类型，输出对象: {output}")
 
             if report_content:
                 write_log(f"✓ 返回成功，报告内容长度: {len(report_content)}")
@@ -984,12 +984,21 @@ def generate_country_report():
                     write_log(f"找到输出: {json.dumps(output, ensure_ascii=False)}")
 
                     report_content = ''
-                    if output.get('type') == 'document':
-                        report_content = output.get('data', '')
-                    elif output.get('type') == 'text':
-                        report_content = output.get('data', '')
-                    elif 'data' in output:
-                        report_content = output.get('data', '')
+                    if isinstance(output, str):
+                        write_log(f"检测到文本输出，直接使用")
+                        report_content = output
+                    else:
+                        if output.get('type') == 'document':
+                            report_content = output.get('data', '')
+                            write_log(f"文档类型输出，URL: {report_content}")
+                        elif output.get('type') == 'text':
+                            report_content = output.get('data', '')
+                            write_log(f"文本类型输出，内容: {report_content}")
+                        elif 'data' in output:
+                            report_content = output.get('data', '')
+                            write_log(f"通用数据输出，内容: {report_content}")
+                        else:
+                            write_log(f"未知输出类型，输出对象: {output}")
 
                     if report_content:
                         write_log(f"✓ 从历史数据中找到输出，返回成功，报告内容长度: {len(report_content)}")
@@ -1144,26 +1153,22 @@ def generate_quarterly_report():
             write_log(f"输出类型: {type(output)}")
             write_log(f"输出内容: {output}")
 
+            report_content = ''
             if isinstance(output, str):
                 write_log(f"检测到文本输出，直接使用")
                 report_content = output
             else:
-                write_log(f"输出类型: {output.get('type')}")
-                write_log(f"输出数据: {output.get('data')}")
-                write_log(f"输出完整对象: {json.dumps(output, ensure_ascii=False)}")
-
-            report_content = ''
-            if output.get('type') == 'document':
-                report_content = output.get('data', '')
-                write_log(f"文档类型输出，URL: {report_content}")
-            elif output.get('type') == 'text':
-                report_content = output.get('data', '')
-                write_log(f"文本类型输出，内容: {report_content}")
-            elif 'data' in output:
-                report_content = output.get('data', '')
-                write_log(f"通用数据输出，内容: {report_content}")
-            else:
-                write_log(f"未知输出类型，输出对象: {output}")
+                if output.get('type') == 'document':
+                    report_content = output.get('data', '')
+                    write_log(f"文档类型输出，URL: {report_content}")
+                elif output.get('type') == 'text':
+                    report_content = output.get('data', '')
+                    write_log(f"文本类型输出，内容: {report_content}")
+                elif 'data' in output:
+                    report_content = output.get('data', '')
+                    write_log(f"通用数据输出，内容: {report_content}")
+                else:
+                    write_log(f"未知输出类型，输出对象: {output}")
 
             if report_content:
                 write_log(f"✓ 返回成功，报告内容长度: {len(report_content)}")
