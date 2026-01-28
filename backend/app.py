@@ -519,8 +519,8 @@ def convert_to_official():
         
         success_statuses = ['succeeded', 'success', 'completed', 'finished', 'running']
         write_log(f"检查状态: {workflow_status} 是否在成功列表中: {workflow_status in success_statuses}")
-        
-        if (workflow_status in success_statuses or workflow_status is None) and len(outputs) > 0:
+
+        if ((workflow_status in success_statuses) or (workflow_status is None)) and len(outputs) > 0:
             output = outputs[-1]
             write_log(f"输出类型: {type(output)}")
             write_log(f"输出内容: {output}")
@@ -769,8 +769,8 @@ def translate_document():
         
         success_statuses = ['succeeded', 'success', 'completed', 'finished', 'running']
         write_log(f"检查状态: {workflow_status} 是否在成功列表中: {workflow_status in success_statuses}")
-        
-        if (workflow_status in success_statuses or workflow_status is None) and len(outputs) > 0:
+
+        if ((workflow_status in success_statuses) or (workflow_status is None)) and len(outputs) > 0:
             output = outputs[-1]
             write_log(f"输出类型: {type(output)}")
             write_log(f"输出内容: {output}")
@@ -1031,7 +1031,7 @@ def generate_country_report():
         success_statuses = ['succeeded', 'success', 'completed', 'finished', 'running']
         write_log(f"检查状态: {workflow_status} 是否在成功列表中: {workflow_status in success_statuses}")
 
-        if (workflow_status in success_statuses or workflow_status is None) and len(outputs) > 0:
+        if ((workflow_status in success_statuses) or (workflow_status is None)) and len(outputs) > 0:
             output = outputs[-1]
             write_log(f"输出类型: {type(output)}")
             write_log(f"输出内容: {output}")
@@ -1254,7 +1254,7 @@ def generate_quarterly_report():
         success_statuses = ['succeeded', 'success', 'completed', 'finished', 'running']
         write_log(f"检查状态: {workflow_status} 是否在成功列表中: {workflow_status in success_statuses}")
 
-        if (workflow_status in success_statuses or workflow_status is None) and len(outputs) > 0:
+        if ((workflow_status in success_statuses) or (workflow_status is None)) and len(outputs) > 0:
             output = outputs[-1]
             write_log(f"输出类型: {type(output)}")
             write_log(f"输出内容: {output}")
