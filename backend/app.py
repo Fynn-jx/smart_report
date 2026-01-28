@@ -58,13 +58,7 @@ def write_log(message):
 
 
 app = Flask(__name__)
-CORS(app, origins=[
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "https://smart-report-jade.vercel.app",
-    "https://banksmart-report.vercel.app",
-    "https://banksmart-report.onrender.com"
-], methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type", "Authorization"])
+CORS(app, origins="*", methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type", "Authorization"])
 
 
 class DifyAPIClient:
