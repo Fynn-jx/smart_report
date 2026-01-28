@@ -93,29 +93,29 @@ export function AcademicToPaper() {
           }),
         });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '处理失败');
-      }
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || '处理失败');
+        }
 
-      const result = await response.json();
+        const result = await response.json();
 
-      if (result.success) {
-        const content =
-          type === 'translate'
-            ? result.translated_content
-            : result.output_url;
+        if (result.success) {
+          const content =
+            type === 'translate'
+              ? result.translated_content
+              : result.output_url;
 
-        setProcessingStates((prev) =>
-          prev.map((state) =>
-            state.id === newState.id
-              ? { ...state, status: 'completed', result: content }
-              : state
-          )
-        );
-      } else {
-        throw new Error(result.error || '处理失败');
-      }
+          setProcessingStates((prev) =>
+            prev.map((state) =>
+              state.id === newState.id
+                ? { ...state, status: 'completed', result: content }
+                : state
+            )
+          );
+        } else {
+          throw new Error(result.error || '处理失败');
+        }
     } catch (error) {
       setProcessingStates((prev) =>
         prev.map((state) =>
