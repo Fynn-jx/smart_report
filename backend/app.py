@@ -504,6 +504,60 @@ def convert_to_official():
                                     outputs.append(output)
                                 write_log(f"收到输出(列表): {len(current_outputs)} 个, 总输出数: {len(outputs)} 个, 内容: {json.dumps(current_outputs, ensure_ascii=False)}")
                     
+                    if 'event' in data and data['event'] == 'workflow_finished':
+                        if 'data' in data and 'outputs' in data['data']:
+                            workflow_outputs = data['data']['outputs']
+                            write_log(f"工作流完成，最终输出: {json.dumps(workflow_outputs, ensure_ascii=False)}")
+                            
+                            if isinstance(workflow_outputs, dict):
+                                for key, value in workflow_outputs.items():
+                                    outputs.append(value)
+                                write_log(f"收到工作流输出(字典): {len(workflow_outputs)} 个, 总输出数: {len(outputs)} 个, 键: {list(workflow_outputs.keys())}")
+                            else:
+                                for output in workflow_outputs:
+                                    outputs.append(output)
+                                write_log(f"收到工作流输出(列表): {len(workflow_outputs)} 个, 总输出数: {len(outputs)} 个, 内容: {json.dumps(workflow_outputs, ensure_ascii=False)}")
+                        
+                        if 'data' in data and 'status' in data['data']:
+                            workflow_status = data['data']['status']
+                            write_log(f"工作流最终状态: {workflow_status}")
+                    
+                    if 'event' in data and data['event'] == 'workflow_finished':
+                        if 'data' in data and 'outputs' in data['data']:
+                            workflow_outputs = data['data']['outputs']
+                            write_log(f"工作流完成，最终输出: {json.dumps(workflow_outputs, ensure_ascii=False)}")
+                            
+                            if isinstance(workflow_outputs, dict):
+                                for key, value in workflow_outputs.items():
+                                    outputs.append(value)
+                                write_log(f"收到工作流输出(字典): {len(workflow_outputs)} 个, 总输出数: {len(outputs)} 个, 键: {list(workflow_outputs.keys())}")
+                            else:
+                                for output in workflow_outputs:
+                                    outputs.append(output)
+                                write_log(f"收到工作流输出(列表): {len(workflow_outputs)} 个, 总输出数: {len(outputs)} 个, 内容: {json.dumps(workflow_outputs, ensure_ascii=False)}")
+                        
+                        if 'data' in data and 'status' in data['data']:
+                            workflow_status = data['data']['status']
+                            write_log(f"工作流最终状态: {workflow_status}")
+                    
+                    if 'event' in data and data['event'] == 'workflow_finished':
+                        if 'data' in data and 'outputs' in data['data']:
+                            workflow_outputs = data['data']['outputs']
+                            write_log(f"工作流完成，最终输出: {json.dumps(workflow_outputs, ensure_ascii=False)}")
+                            
+                            if isinstance(workflow_outputs, dict):
+                                for key, value in workflow_outputs.items():
+                                    outputs.append(value)
+                                write_log(f"收到工作流输出(字典): {len(workflow_outputs)} 个, 总输出数: {len(outputs)} 个, 键: {list(workflow_outputs.keys())}")
+                            else:
+                                for output in workflow_outputs:
+                                    outputs.append(output)
+                                write_log(f"收到工作流输出(列表): {len(workflow_outputs)} 个, 总输出数: {len(outputs)} 个, 内容: {json.dumps(workflow_outputs, ensure_ascii=False)}")
+                        
+                        if 'data' in data and 'status' in data['data']:
+                            workflow_status = data['data']['status']
+                            write_log(f"工作流最终状态: {workflow_status}")
+                    
                 except json.JSONDecodeError as e:
                     write_log(f"解析数据行失败: {e}, 行内容: {line}")
             
@@ -1014,6 +1068,42 @@ def generate_country_report():
                                 for output in current_outputs:
                                     outputs.append(output)
                                 write_log(f"收到输出(列表): {len(current_outputs)} 个, 总输出数: {len(outputs)} 个, 内容: {json.dumps(current_outputs, ensure_ascii=False)}")
+                    
+                    if 'event' in data and data['event'] == 'workflow_finished':
+                        if 'data' in data and 'outputs' in data['data']:
+                            workflow_outputs = data['data']['outputs']
+                            write_log(f"工作流完成，最终输出: {json.dumps(workflow_outputs, ensure_ascii=False)}")
+                            
+                            if isinstance(workflow_outputs, dict):
+                                for key, value in workflow_outputs.items():
+                                    outputs.append(value)
+                                write_log(f"收到工作流输出(字典): {len(workflow_outputs)} 个, 总输出数: {len(outputs)} 个, 键: {list(workflow_outputs.keys())}")
+                            else:
+                                for output in workflow_outputs:
+                                    outputs.append(output)
+                                write_log(f"收到工作流输出(列表): {len(workflow_outputs)} 个, 总输出数: {len(outputs)} 个, 内容: {json.dumps(workflow_outputs, ensure_ascii=False)}")
+                        
+                        if 'data' in data and 'status' in data['data']:
+                            workflow_status = data['data']['status']
+                            write_log(f"工作流最终状态: {workflow_status}")
+                    
+                    if 'event' in data and data['event'] == 'workflow_finished':
+                        if 'data' in data and 'outputs' in data['data']:
+                            workflow_outputs = data['data']['outputs']
+                            write_log(f"工作流完成，最终输出: {json.dumps(workflow_outputs, ensure_ascii=False)}")
+                            
+                            if isinstance(workflow_outputs, dict):
+                                for key, value in workflow_outputs.items():
+                                    outputs.append(value)
+                                write_log(f"收到工作流输出(字典): {len(workflow_outputs)} 个, 总输出数: {len(outputs)} 个, 键: {list(workflow_outputs.keys())}")
+                            else:
+                                for output in workflow_outputs:
+                                    outputs.append(output)
+                                write_log(f"收到工作流输出(列表): {len(workflow_outputs)} 个, 总输出数: {len(outputs)} 个, 内容: {json.dumps(workflow_outputs, ensure_ascii=False)}")
+                        
+                        if 'data' in data and 'status' in data['data']:
+                            workflow_status = data['data']['status']
+                            write_log(f"工作流最终状态: {workflow_status}")
 
                 except json.JSONDecodeError as e:
                     write_log(f"解析数据行失败: {e}, 行内容: {line}")
