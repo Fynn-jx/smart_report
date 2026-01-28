@@ -1263,8 +1263,17 @@ def generate_quarterly_report():
         country_name = country_names.get(country, country)
 
         workflow_inputs = {
-            "Country": country,
-            "Report_Type": "quarterly"
+            "Inflation_Rate": "https://zh.tradingeconomics.com/egypt/inflation-cpi",
+            "Unemployment_Rate": "https://zh.tradingeconomics.com/egypt/unemployment-rate",
+            "Stock_Market": "https://zh.tradingeconomics.com/egypt/stock-market",
+            "Currency": "https://zh.tradingeconomics.com/egypt/currency",
+            "Bond_Yield": "https://cn.investing.com/rates-bonds/egypt-10-year-bond-yield-historical-data",
+            "CAPMAS": "https://www.capmas.gov.eg/publications/22",
+            "Central_Bank_of_Egypt": "https://www.cbe.org.eg/en/news-publications/news/2025/11/09/08/06/net-international-reserves-at-the-end-of-october-2025",
+            "Ministry_of_Finance": "https://mof.gov.eg/ar/posts/media/",
+            "Sigma_Capital": "https://sigmacapital.com.eg/main/news_page_exact?u_sess=%27&newsType=MIST&newsId=45755872",
+            "AP_News": "https://apnews.com/article/egypt-fuel-prices-economy-inflation-diesel-gas-e001493d45c58389cbbe82899a37d74f",
+            "El_Balad_News": "https://www.elbalad.news/#google_vignette"
         }
 
         client = DifyAPIClient(QUARTERLY_REPORT_API_KEY, DIFY_BASE_URL)
