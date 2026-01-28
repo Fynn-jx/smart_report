@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Upload, FileText, Loader2, Download, CheckCircle2, X, Languages, FileEdit } from 'lucide-react';
 import { StyleSelectionModal } from '@/components/Selection';
+import { getApiConfig } from '@/config/api';
 
 type OperationType = 'translate' | 'rewrite';
 type ProcessingState = {
@@ -19,6 +20,7 @@ export function AcademicToPaper() {
   const [showStyleModal, setShowStyleModal] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState<string>('style1');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const apiConfig = getApiConfig();
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -65,7 +67,7 @@ export function AcademicToPaper() {
           formData.append('file', file);
           formData.append('user', 'default');
 
-          const uploadResponse = await fetch('https://banksmart-report.onrender.com/api/dify/upload', {
+          const uploadResponse = await fetch(apiConfig.UPLOAD_URL, {
             method: 'POST',
             body: formData,
           });
@@ -86,8 +88,8 @@ export function AcademicToPaper() {
 
         const apiUrl =
           type === 'translate'
-            ? 'https://banksmart-report.onrender.com/api/dify/translate-document'
-            : 'https://banksmart-report.onrender.com/api/dify/convert';
+            ? apiConfig.TRANSLATE_URL
+            : apiConfig.CONVERT_URL;
 
         const response = await fetch(apiUrl, {
           method: 'POST',
@@ -157,7 +159,7 @@ export function AcademicToPaper() {
           formData.append('file', file);
           formData.append('user', 'default');
 
-          const uploadResponse = await fetch('https://banksmart-report.onrender.com/api/dify/upload', {
+          const uploadResponse = await fetch(apiConfig.UPLOAD_URL, {
             method: 'POST',
             body: formData,
           });
@@ -176,7 +178,7 @@ export function AcademicToPaper() {
           setIsUploading(false);
         }
 
-        const response = await fetch('https://banksmart-report.onrender.com/api/dify/convert', {
+        const response = await fetch(apiConfig.CONVERT_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
