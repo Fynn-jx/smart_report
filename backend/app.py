@@ -524,16 +524,16 @@ def convert_to_official():
             output = outputs[-1]
             write_log(f"输出类型: {type(output)}")
             write_log(f"输出内容: {output}")
-            
+
+            output_url = ''
             if isinstance(output, str):
                 write_log(f"检测到文本输出，直接使用")
                 output_url = output
-            else:
+            elif isinstance(output, dict):
                 write_log(f"输出类型: {output.get('type')}")
                 write_log(f"输出数据: {output.get('data')}")
                 write_log(f"输出完整对象: {json.dumps(output, ensure_ascii=False)}")
-                
-                output_url = ''
+
                 if output.get('type') == 'document':
                     output_url = output.get('data', '')
                     write_log(f"文档类型输出，URL: {output_url}")
@@ -545,7 +545,30 @@ def convert_to_official():
                     write_log(f"通用数据输出，内容: {output_url}")
                 else:
                     write_log(f"未知输出类型，输出对象: {output}")
-            
+            elif isinstance(output, list):
+                write_log(f"检测到列表输出，尝试提取第一个元素")
+                if len(output) > 0:
+                    first_item = output[0]
+                    if isinstance(first_item, str):
+                        output_url = first_item
+                        write_log(f"列表第一个元素是字符串，直接使用: {output_url}")
+                    elif isinstance(first_item, dict):
+                        if first_item.get('type') == 'document':
+                            output_url = first_item.get('data', '')
+                            write_log(f"列表第一个元素是文档，URL: {output_url}")
+                        elif first_item.get('type') == 'text':
+                            output_url = first_item.get('data', '')
+                            write_log(f"列表第一个元素是文本，内容: {output_url}")
+                        elif 'data' in first_item:
+                            output_url = first_item.get('data', '')
+                            write_log(f"列表第一个元素通用数据，内容: {output_url}")
+                    else:
+                        write_log(f"列表第一个元素类型未知: {type(first_item)}")
+                else:
+                    write_log(f"列表为空，无法提取")
+            else:
+                write_log(f"未知输出类型: {type(output)}")
+
             if output_url:
                 write_log(f"✓ 返回成功，输出URL: {output_url}")
                 return jsonify({
@@ -562,15 +585,39 @@ def convert_to_official():
                 if 'data' in data and 'outputs' in data['data'] and len(data['data']['outputs']) > 0:
                     output = data['data']['outputs'][0]
                     write_log(f"找到输出: {json.dumps(output, ensure_ascii=False)}")
-                    
+
                     output_url = ''
-                    if output.get('type') == 'document':
-                        output_url = output.get('data', '')
-                    elif output.get('type') == 'text':
-                        output_url = output.get('data', '')
-                    elif 'data' in output:
-                        output_url = output.get('data', '')
-                    
+                    if isinstance(output, str):
+                        write_log(f"检测到文本输出，直接使用")
+                        output_url = output
+                    elif isinstance(output, dict):
+                        if output.get('type') == 'document':
+                            output_url = output.get('data', '')
+                            write_log(f"文档类型输出，URL: {output_url}")
+                        elif output.get('type') == 'text':
+                            output_url = output.get('data', '')
+                            write_log(f"文本类型输出，内容: {output_url}")
+                        elif 'data' in output:
+                            output_url = output.get('data', '')
+                            write_log(f"通用数据输出，内容: {output_url}")
+                    elif isinstance(output, list):
+                        write_log(f"检测到列表输出，尝试提取第一个元素")
+                        if len(output) > 0:
+                            first_item = output[0]
+                            if isinstance(first_item, str):
+                                output_url = first_item
+                                write_log(f"列表第一个元素是字符串，直接使用: {output_url}")
+                            elif isinstance(first_item, dict):
+                                if first_item.get('type') == 'document':
+                                    output_url = first_item.get('data', '')
+                                    write_log(f"列表第一个元素是文档，URL: {output_url}")
+                                elif first_item.get('type') == 'text':
+                                    output_url = first_item.get('data', '')
+                                    write_log(f"列表第一个元素是文本，内容: {output_url}")
+                                elif 'data' in first_item:
+                                    output_url = first_item.get('data', '')
+                                    write_log(f"列表第一个元素通用数据，内容: {output_url}")
+
                     if output_url:
                         write_log(f"✓ 从历史数据中找到输出，返回成功，输出URL: {output_url}")
                         return jsonify({
@@ -727,12 +774,12 @@ def translate_document():
             output = outputs[-1]
             write_log(f"输出类型: {type(output)}")
             write_log(f"输出内容: {output}")
-            
+
             translated_content = ''
             if isinstance(output, str):
                 write_log(f"检测到文本输出，直接使用")
                 translated_content = output
-            else:
+            elif isinstance(output, dict):
                 if output.get('type') == 'document':
                     translated_content = output.get('data', '')
                     write_log(f"文档类型输出，URL: {translated_content}")
@@ -744,7 +791,30 @@ def translate_document():
                     write_log(f"通用数据输出，内容: {translated_content}")
                 else:
                     write_log(f"未知输出类型，输出对象: {output}")
-            
+            elif isinstance(output, list):
+                write_log(f"检测到列表输出，尝试提取第一个元素")
+                if len(output) > 0:
+                    first_item = output[0]
+                    if isinstance(first_item, str):
+                        translated_content = first_item
+                        write_log(f"列表第一个元素是字符串，直接使用: {translated_content}")
+                    elif isinstance(first_item, dict):
+                        if first_item.get('type') == 'document':
+                            translated_content = first_item.get('data', '')
+                            write_log(f"列表第一个元素是文档，URL: {translated_content}")
+                        elif first_item.get('type') == 'text':
+                            translated_content = first_item.get('data', '')
+                            write_log(f"列表第一个元素是文本，内容: {translated_content}")
+                        elif 'data' in first_item:
+                            translated_content = first_item.get('data', '')
+                            write_log(f"列表第一个元素通用数据，内容: {translated_content}")
+                    else:
+                        write_log(f"列表第一个元素类型未知: {type(first_item)}")
+                else:
+                    write_log(f"列表为空，无法提取")
+            else:
+                write_log(f"未知输出类型: {type(output)}")
+
             if translated_content:
                 write_log(f"✓ 返回成功，翻译内容长度: {len(translated_content)}")
                 return jsonify({
@@ -760,19 +830,39 @@ def translate_document():
                 if 'data' in data and 'outputs' in data['data'] and len(data['data']['outputs']) > 0:
                     output = data['data']['outputs'][0]
                     write_log(f"找到输出: {json.dumps(output, ensure_ascii=False)}")
-                    
+
                     translated_content = ''
                     if isinstance(output, str):
                         write_log(f"检测到文本输出，直接使用")
                         translated_content = output
-                    else:
+                    elif isinstance(output, dict):
                         if output.get('type') == 'document':
                             translated_content = output.get('data', '')
+                            write_log(f"文档类型输出，URL: {translated_content}")
                         elif output.get('type') == 'text':
                             translated_content = output.get('data', '')
+                            write_log(f"文本类型输出，内容: {translated_content}")
                         elif 'data' in output:
                             translated_content = output.get('data', '')
-                    
+                            write_log(f"通用数据输出，内容: {translated_content}")
+                    elif isinstance(output, list):
+                        write_log(f"检测到列表输出，尝试提取第一个元素")
+                        if len(output) > 0:
+                            first_item = output[0]
+                            if isinstance(first_item, str):
+                                translated_content = first_item
+                                write_log(f"列表第一个元素是字符串，直接使用: {translated_content}")
+                            elif isinstance(first_item, dict):
+                                if first_item.get('type') == 'document':
+                                    translated_content = first_item.get('data', '')
+                                    write_log(f"列表第一个元素是文档，URL: {translated_content}")
+                                elif first_item.get('type') == 'text':
+                                    translated_content = first_item.get('data', '')
+                                    write_log(f"列表第一个元素是文本，内容: {translated_content}")
+                                elif 'data' in first_item:
+                                    translated_content = first_item.get('data', '')
+                                    write_log(f"列表第一个元素通用数据，内容: {translated_content}")
+
                     if translated_content:
                         write_log(f"✓ 从历史数据中找到输出，返回成功，翻译内容长度: {len(translated_content)}")
                         return jsonify({
@@ -988,7 +1078,7 @@ def generate_country_report():
                     if isinstance(output, str):
                         write_log(f"检测到文本输出，直接使用")
                         report_content = output
-                    else:
+                    elif isinstance(output, dict):
                         if output.get('type') == 'document':
                             report_content = output.get('data', '')
                             write_log(f"文档类型输出，URL: {report_content}")
@@ -998,8 +1088,23 @@ def generate_country_report():
                         elif 'data' in output:
                             report_content = output.get('data', '')
                             write_log(f"通用数据输出，内容: {report_content}")
-                        else:
-                            write_log(f"未知输出类型，输出对象: {output}")
+                    elif isinstance(output, list):
+                        write_log(f"检测到列表输出，尝试提取第一个元素")
+                        if len(output) > 0:
+                            first_item = output[0]
+                            if isinstance(first_item, str):
+                                report_content = first_item
+                                write_log(f"列表第一个元素是字符串，直接使用: {report_content}")
+                            elif isinstance(first_item, dict):
+                                if first_item.get('type') == 'document':
+                                    report_content = first_item.get('data', '')
+                                    write_log(f"列表第一个元素是文档，URL: {report_content}")
+                                elif first_item.get('type') == 'text':
+                                    report_content = first_item.get('data', '')
+                                    write_log(f"列表第一个元素是文本，内容: {report_content}")
+                                elif 'data' in first_item:
+                                    report_content = first_item.get('data', '')
+                                    write_log(f"列表第一个元素通用数据，内容: {report_content}")
 
                     if report_content:
                         write_log(f"✓ 从历史数据中找到输出，返回成功，报告内容长度: {len(report_content)}")
@@ -1158,7 +1263,7 @@ def generate_quarterly_report():
             if isinstance(output, str):
                 write_log(f"检测到文本输出，直接使用")
                 report_content = output
-            else:
+            elif isinstance(output, dict):
                 if output.get('type') == 'document':
                     report_content = output.get('data', '')
                     write_log(f"文档类型输出，URL: {report_content}")
@@ -1170,6 +1275,29 @@ def generate_quarterly_report():
                     write_log(f"通用数据输出，内容: {report_content}")
                 else:
                     write_log(f"未知输出类型，输出对象: {output}")
+            elif isinstance(output, list):
+                write_log(f"检测到列表输出，尝试提取第一个元素")
+                if len(output) > 0:
+                    first_item = output[0]
+                    if isinstance(first_item, str):
+                        report_content = first_item
+                        write_log(f"列表第一个元素是字符串，直接使用: {report_content}")
+                    elif isinstance(first_item, dict):
+                        if first_item.get('type') == 'document':
+                            report_content = first_item.get('data', '')
+                            write_log(f"列表第一个元素是文档，URL: {report_content}")
+                        elif first_item.get('type') == 'text':
+                            report_content = first_item.get('data', '')
+                            write_log(f"列表第一个元素是文本，内容: {report_content}")
+                        elif 'data' in first_item:
+                            report_content = first_item.get('data', '')
+                            write_log(f"列表第一个元素通用数据，内容: {report_content}")
+                    else:
+                        write_log(f"列表第一个元素类型未知: {type(first_item)}")
+                else:
+                    write_log(f"列表为空，无法提取")
+            else:
+                write_log(f"未知输出类型: {type(output)}")
 
             if report_content:
                 write_log(f"✓ 返回成功，报告内容长度: {len(report_content)}")
@@ -1189,12 +1317,36 @@ def generate_quarterly_report():
                     write_log(f"找到输出: {json.dumps(output, ensure_ascii=False)}")
 
                     report_content = ''
-                    if output.get('type') == 'document':
-                        report_content = output.get('data', '')
-                    elif output.get('type') == 'text':
-                        report_content = output.get('data', '')
-                    elif 'data' in output:
-                        report_content = output.get('data', '')
+                    if isinstance(output, str):
+                        write_log(f"检测到文本输出，直接使用")
+                        report_content = output
+                    elif isinstance(output, dict):
+                        if output.get('type') == 'document':
+                            report_content = output.get('data', '')
+                            write_log(f"文档类型输出，URL: {report_content}")
+                        elif output.get('type') == 'text':
+                            report_content = output.get('data', '')
+                            write_log(f"文本类型输出，内容: {report_content}")
+                        elif 'data' in output:
+                            report_content = output.get('data', '')
+                            write_log(f"通用数据输出，内容: {report_content}")
+                    elif isinstance(output, list):
+                        write_log(f"检测到列表输出，尝试提取第一个元素")
+                        if len(output) > 0:
+                            first_item = output[0]
+                            if isinstance(first_item, str):
+                                report_content = first_item
+                                write_log(f"列表第一个元素是字符串，直接使用: {report_content}")
+                            elif isinstance(first_item, dict):
+                                if first_item.get('type') == 'document':
+                                    report_content = first_item.get('data', '')
+                                    write_log(f"列表第一个元素是文档，URL: {report_content}")
+                                elif first_item.get('type') == 'text':
+                                    report_content = first_item.get('data', '')
+                                    write_log(f"列表第一个元素是文本，内容: {report_content}")
+                                elif 'data' in first_item:
+                                    report_content = first_item.get('data', '')
+                                    write_log(f"列表第一个元素通用数据，内容: {report_content}")
 
                     if report_content:
                         write_log(f"✓ 从历史数据中找到输出，返回成功，报告内容长度: {len(report_content)}")
