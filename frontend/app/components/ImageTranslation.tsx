@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { Upload, Loader2, Download, CheckCircle2, X, Trash2, RefreshCw } from 'lucide-react';
+import { getApiConfig } from '@/config/api';
 
 // 单个文件的处理状态
 type FileStatus = 'idle' | 'processing' | 'completed' | 'error';
@@ -18,6 +19,7 @@ interface FileData {
 export function ImageTranslation() {
   const [files, setFiles] = useState<FileData[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const apiConfig = getApiConfig();
 
   // 最多上传5张图片
   const MAX_FILES = 5;
@@ -84,7 +86,7 @@ export function ImageTranslation() {
       console.log('发送请求到后端...');
 
       // 发送请求到本地Python后端服务器
-      const response = await fetch('https://banksmart-report.onrender.com/api/translate-image', {
+      const response = await fetch(apiConfig.TRANSLATE_IMAGE_URL, {
         method: 'POST',
         body: formData,
       });
