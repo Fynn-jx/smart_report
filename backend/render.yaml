@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: banksmart-report
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.0
+    disk:
+      name: data
+      mountPath: /opt/render/project/data
+      sizeGB: 1
