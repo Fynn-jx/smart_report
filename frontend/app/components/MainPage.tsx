@@ -24,7 +24,12 @@ export function MainPage({ onLogout }: MainPageProps) {
       {/* Header */}
       <header className="border-b border-border bg-card">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <h1 className="text-foreground">公文撰写系统</h1>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10">
+              <img src="/images/logo.png" alt="Logo" className="w-full h-full object-contain" />
+            </div>
+            <h1 className="text-foreground">公文撰写系统</h1>
+          </div>
           <button
             onClick={onLogout}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"

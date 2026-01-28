@@ -52,8 +52,8 @@ export function CountryReport() {
 
     try {
       const apiUrl = reportType === 'situation' 
-        ? 'http://127.0.0.1:5000/api/dify/country-report'
-        : 'http://127.0.0.1:5000/api/dify/quarterly-report';
+        ? 'https://banksmart-report.onrender.com/api/dify/country-report'
+        : 'https://banksmart-report.onrender.com/api/dify/quarterly-report';
       
       const apiKey = reportType === 'situation'
         ? 'app-IWiuVAJEEBP8zoDUOME7XKKG'

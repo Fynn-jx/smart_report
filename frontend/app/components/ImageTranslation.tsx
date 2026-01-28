@@ -84,7 +84,7 @@ export function ImageTranslation() {
       console.log('发送请求到后端...');
 
       // 发送请求到本地Python后端服务器
-      const response = await fetch('http://127.0.0.1:5000/api/translate', {
+      const response = await fetch('https://banksmart-report.onrender.com/api/translate-image', {
         method: 'POST',
         body: formData,
       });

@@ -47,7 +47,9 @@ export function AcademicToPaper() {
     setProcessingStates((prev) => [...prev, newState]);
 
     try {
-        if (processingStates.length === 0 && !fileId) {
+        let currentFileId = fileId;
+
+        if (!fileId) {
           setIsUploading(true);
           setUploadProgress(0);
 
@@ -55,7 +57,7 @@ export function AcademicToPaper() {
           formData.append('file', file);
           formData.append('user', 'default');
 
-          const uploadResponse = await fetch('http://127.0.0.1:5000/api/dify/upload', {
+          const uploadResponse = await fetch('https://banksmart-report.onrender.com/api/dify/upload', {
             method: 'POST',
             body: formData,
           });
@@ -66,7 +68,8 @@ export function AcademicToPaper() {
           }
 
           const uploadResult = await uploadResponse.json();
-          setFileId(uploadResult.file_id);
+          currentFileId = uploadResult.file_id;
+          setFileId(currentFileId);
 
           setUploadProgress(100);
           await new Promise((resolve) => setTimeout(resolve, 500));
@@ -75,8 +78,8 @@ export function AcademicToPaper() {
 
         const apiUrl =
           type === 'translate'
-            ? 'http://127.0.0.1:5000/api/dify/translate-document'
-            : 'http://127.0.0.1:5000/api/dify/convert';
+            ? 'https://banksmart-report.onrender.com/api/dify/translate-document'
+            : 'https://banksmart-report.onrender.com/api/dify/convert';
 
         const response = await fetch(apiUrl, {
           method: 'POST',
@@ -84,7 +87,7 @@ export function AcademicToPaper() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            file_id: fileId,
+            file_id: currentFileId,
             user: 'default',
             output_format: 'docx',
           }),
@@ -128,7 +131,7 @@ export function AcademicToPaper() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${type === 'translate' ? '原文翻译' : '公文改写'}结果.txt`;
+    a.download = `${type === 'translate' ? '原文翻译' : '公文写作'}结果.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };

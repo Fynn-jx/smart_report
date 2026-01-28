@@ -31,9 +31,9 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <nav className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <FileText className="w-5 h-5 text-primary-foreground" />
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10">
+                <img src="/images/logo.png" alt="Logo" className="w-full h-full object-contain" />
               </div>
               <span className="font-medium text-foreground">公文撰写系统</span>
             </div>
