@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { Upload, FileText, Loader2, Download, CheckCircle2, X, Languages, FileEdit } from 'lucide-react';
+import { StyleSelectionModal } from '@/components/Selection';
 
 type OperationType = 'translate' | 'rewrite';
 type ProcessingState = {
@@ -15,6 +16,8 @@ export function AcademicToPaper() {
   const [isUploading, setIsUploading] = useState(false);
   const [processingStates, setProcessingStates] = useState<ProcessingState[]>([]);
   const [fileId, setFileId] = useState<string | null>(null);
+  const [showStyleModal, setShowStyleModal] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState<string>('style1');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -37,6 +40,11 @@ export function AcademicToPaper() {
 
   const handleOperation = async (type: OperationType) => {
     if (!file) return;
+
+    if (type === 'rewrite') {
+      setShowStyleModal(true);
+      return;
+    }
 
     const newState: ProcessingState = {
       id: Date.now().toString(),
@@ -126,6 +134,91 @@ export function AcademicToPaper() {
     }
   };
 
+  const handleStyleSelect = async (style: string) => {
+    setSelectedStyle(style);
+    setShowStyleModal(false);
+
+    const newState: ProcessingState = {
+      id: Date.now().toString(),
+      type: 'rewrite',
+      status: 'processing',
+    };
+
+    setProcessingStates((prev) => [...prev, newState]);
+
+    try {
+        let currentFileId = fileId;
+
+        if (!fileId) {
+          setIsUploading(true);
+          setUploadProgress(0);
+
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('user', 'default');
+
+          const uploadResponse = await fetch('https://banksmart-report.onrender.com/api/dify/upload', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!uploadResponse.ok) {
+            const errorData = await uploadResponse.json();
+            throw new Error(errorData.error || '上传失败');
+          }
+
+          const uploadResult = await uploadResponse.json();
+          currentFileId = uploadResult.file_id;
+          setFileId(currentFileId);
+
+          setUploadProgress(100);
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          setIsUploading(false);
+        }
+
+        const response = await fetch('https://banksmart-report.onrender.com/api/dify/convert', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            file_id: currentFileId,
+            user: 'default',
+            output_format: 'docx',
+            style: style,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || '处理失败');
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+          const content = result.output_url;
+
+          setProcessingStates((prev) =>
+            prev.map((state) =>
+              state.id === newState.id
+                ? { ...state, status: 'completed', result: content }
+                : state
+            )
+          );
+        } else {
+          throw new Error(result.error || '处理失败');
+        }
+    } catch (error) {
+      setProcessingStates((prev) =>
+        prev.map((state) =>
+          state.id === newState.id ? { ...state, status: 'error' } : state
+        )
+      );
+      console.error('处理失败:', error);
+    }
+  };
+
   const handleDownload = (result: string, type: OperationType) => {
     const blob = new Blob([result], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -166,7 +259,7 @@ export function AcademicToPaper() {
       <div className="mb-6">
         <h2 className="mb-2">学术报告处理</h2>
         <p className="text-muted-foreground">
-          上传学术报告或研究报告，可选择原文翻译或公文改写
+          上传学术报告或研究报告，可选择原文翻译或公文写作
         </p>
       </div>
 
@@ -258,7 +351,7 @@ export function AcademicToPaper() {
                       <FileEdit className="w-6 h-6 text-green-600" />
                     </div>
                     <div className="text-center">
-                      <p className="font-medium text-foreground mb-1">公文改写</p>
+                      <p className="font-medium text-foreground mb-1">公文写作</p>
                       <p className="text-sm text-muted-foreground">
                         转换为规范公文格式
                       </p>
@@ -277,7 +370,7 @@ export function AcademicToPaper() {
                 <div className="text-center py-8">
                   <Loader2 className="w-12 h-12 mx-auto mb-4 text-primary animate-spin" />
                   <h3 className="mb-2">
-                    {state.type === 'translate' ? '正在翻译...' : '正在改写...'}
+                    {state.type === 'translate' ? '正在翻译...' : '正在写作...'}
                   </h3>
                   <p className="text-muted-foreground">
                     预计需要 8-10 分钟，请耐心等待
@@ -305,7 +398,7 @@ export function AcademicToPaper() {
                       </div>
                       <div>
                         <h3>
-                          {state.type === 'translate' ? '原文翻译结果' : '公文改写结果'}
+                          {state.type === 'translate' ? '原文翻译结果' : '公文写作结果'}
                         </h3>
                         <p className="text-sm text-muted-foreground">处理完成</p>
                       </div>
@@ -358,6 +451,12 @@ export function AcademicToPaper() {
           ))}
         </div>
       )}
+      
+      <StyleSelectionModal
+        isOpen={showStyleModal}
+        onSelect={handleStyleSelect}
+        onClose={() => setShowStyleModal(false)}
+      />
     </div>
   );
 }

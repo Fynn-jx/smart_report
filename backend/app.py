@@ -58,7 +58,11 @@ def write_log(message):
 
 
 app = Flask(__name__)
-CORS(app, origins="*", methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type", "Authorization"])
+CORS(app, origins=[
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://banksmart-report.vercel.app"
+], methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type", "Authorization"])
 
 
 class DifyAPIClient:
@@ -428,19 +432,21 @@ def convert_to_official():
         file_id = data.get('file_id')
         user = data.get('user', 'default')
         output_format = data.get('output_format', 'docx')
+        style = data.get('style', 'style1')
 
         if not file_id:
             return jsonify({"error": "file_id is required"}), 400
 
         write_log(f"\n{'='*60}")
-        write_log(f"转公文请求: file_id={file_id}, format={output_format}")
+        write_log(f"转公文请求: file_id={file_id}, format={output_format}, style={style}")
 
         workflow_inputs = {
             "wenjian": {
                 "type": "document",
                 "transfer_method": "local_file",
                 "upload_file_id": file_id
-            }
+            },
+            "style": style
         }
 
         client = init_dify_client()
