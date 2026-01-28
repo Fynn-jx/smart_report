@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Globe, Loader2, Download, CheckCircle2, ChevronDown } from 'lucide-react';
 import { CountrySelectionModal } from '@/components/CountrySelectionModal';
+import { getApiConfig } from '@/config/api';
 
 type ReportType = 'situation' | 'quarterly';
 type ProcessStatus = 'idle' | 'processing' | 'completed' | 'error';
@@ -45,6 +46,7 @@ export function CountryReport() {
   const [status, setStatus] = useState<ProcessStatus>('idle');
   const [result, setResult] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const apiConfig = getApiConfig();
 
   const handleGenerate = async () => {
     setStatus('processing');
@@ -52,8 +54,8 @@ export function CountryReport() {
 
     try {
       const apiUrl = reportType === 'situation' 
-        ? 'https://banksmart-report.onrender.com/api/dify/country-report'
-        : 'https://banksmart-report.onrender.com/api/dify/quarterly-report';
+        ? apiConfig.COUNTRY_REPORT_URL
+        : apiConfig.QUARTERLY_REPORT_URL;
       
       const apiKey = reportType === 'situation'
         ? 'app-IWiuVAJEEBP8zoDUOME7XKKG'
