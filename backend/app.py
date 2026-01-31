@@ -52,7 +52,7 @@ OPENAI_MODEL_NAME = "google/gemini-3-pro-image-preview"
 
 # 应用配置
 APP_ID = "Dify"
-BACKEND_PORT = 15000
+BACKEND_PORT = 5000
 
 # 处理参数
 UPLOAD_TIMEOUT = 120
@@ -1556,8 +1556,9 @@ if __name__ == '__main__':
     print("Dify API Backend Server")
     print("=" * 60)
     print(f"App ID: {APP_ID}")
-    
-    port = int(os.environ.get('PORT', BACKEND_PORT))
+
+    # 强制使用 BACKEND_PORT，忽略 PORT 环境变量（Docker 端口映射由容器配置）
+    port = BACKEND_PORT
     host = '0.0.0.0'
     debug = os.environ.get('FLASK_ENV') != 'production'
     
