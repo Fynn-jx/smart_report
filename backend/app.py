@@ -1557,8 +1557,9 @@ if __name__ == '__main__':
     print("=" * 60)
     print(f"App ID: {APP_ID}")
 
-    # 强制使用 BACKEND_PORT，忽略 PORT 环境变量（Docker 端口映射由容器配置）
-    port = BACKEND_PORT
+    # 使用 SERVER_PORT 环境变量配置端口，默认使用 BACKEND_PORT
+    # 注意：不要使用 PORT 变量，Docker 会自动设置它导致冲突
+    port = int(os.environ.get('SERVER_PORT', BACKEND_PORT))
     host = '0.0.0.0'
     debug = os.environ.get('FLASK_ENV') != 'production'
     
