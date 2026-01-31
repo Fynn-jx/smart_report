@@ -9,13 +9,13 @@ export const API_CONFIG = {
     TRANSLATE_IMAGE_URL: 'http://localhost:5000/api/translate-image',
   },
   production: {
-    BASE_URL: 'https://jx-report.nfeyre.top',
-    UPLOAD_URL: 'https://jx-report.nfeyre.top/api/dify/upload',
-    CONVERT_URL: 'https://jx-report.nfeyre.top/api/dify/convert',
-    TRANSLATE_URL: 'https://jx-report.nfeyre.top/api/dify/translate-document',
-    COUNTRY_REPORT_URL: 'https://jx-report.nfeyre.top/api/dify/country-report',
-    QUARTERLY_REPORT_URL: 'https://jx-report.nfeyre.top/api/dify/quarterly-report',
-    TRANSLATE_IMAGE_URL: 'https://jx-report.nfeyre.top/api/translate-image',
+    BASE_URL: 'https://smartdocx.jxchen.me',
+    UPLOAD_URL: 'https://smartdocx.jxchen.me/api/dify/upload',
+    CONVERT_URL: 'https://smartdocx.jxchen.me/api/dify/convert',
+    TRANSLATE_URL: 'https://smartdocx.jxchen.me/api/dify/translate-document',
+    COUNTRY_REPORT_URL: 'https://smartdocx.jxchen.me/api/dify/country-report',
+    QUARTERLY_REPORT_URL: 'https://smartdocx.jxchen.me/api/dify/quarterly-report',
+    TRANSLATE_IMAGE_URL: 'https://smartdocx.jxchen.me/api/translate-image',
   },
 };
 

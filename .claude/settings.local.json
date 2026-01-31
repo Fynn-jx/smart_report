@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(test:*)",
+      "Bash(uv pip install:*)",
+      "Bash(pnpm install:*)",
+      "Bash(python app.py:*)",
+      "Bash(pnpm run dev)",
+      "Bash(pnpm dev:*)",
+      "Bash(timeout 5:*)",
+      "Bash(python server.py:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git fetch:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}
