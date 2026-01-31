@@ -9,13 +9,13 @@ export const API_CONFIG = {
     TRANSLATE_IMAGE_URL: 'http://localhost:5000/api/translate-image',
   },
   production: {
-    BASE_URL: 'https://banksmart-report.onrender.com',
-    UPLOAD_URL: 'https://banksmart-report.onrender.com/api/dify/upload',
-    CONVERT_URL: 'https://banksmart-report.onrender.com/api/dify/convert',
-    TRANSLATE_URL: 'https://banksmart-report.onrender.com/api/dify/translate-document',
-    COUNTRY_REPORT_URL: 'https://banksmart-report.onrender.com/api/dify/country-report',
-    QUARTERLY_REPORT_URL: 'https://banksmart-report.onrender.com/api/dify/quarterly-report',
-    TRANSLATE_IMAGE_URL: 'https://banksmart-report.onrender.com/api/translate-image',
+    BASE_URL: 'https://jx-report.nfeyre.top',
+    UPLOAD_URL: 'https://jx-report.nfeyre.top/api/dify/upload',
+    CONVERT_URL: 'https://jx-report.nfeyre.top/api/dify/convert',
+    TRANSLATE_URL: 'https://jx-report.nfeyre.top/api/dify/translate-document',
+    COUNTRY_REPORT_URL: 'https://jx-report.nfeyre.top/api/dify/country-report',
+    QUARTERLY_REPORT_URL: 'https://jx-report.nfeyre.top/api/dify/quarterly-report',
+    TRANSLATE_IMAGE_URL: 'https://jx-report.nfeyre.top/api/translate-image',
   },
 };
 

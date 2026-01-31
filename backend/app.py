@@ -52,7 +52,7 @@ OPENAI_MODEL_NAME = "google/gemini-3-pro-image-preview"
 
 # 应用配置
 APP_ID = "Dify"
-BACKEND_PORT = 5000
+BACKEND_PORT = 15000
 
 # 处理参数
 UPLOAD_TIMEOUT = 120
