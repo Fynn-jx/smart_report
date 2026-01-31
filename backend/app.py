@@ -91,7 +91,8 @@ CORS(app, resources={
             "http://localhost:5174",
             "http://localhost:3000",
             "https://banksmart-report.vercel.app",
-            "https://smart-report-jade.vercel.app"
+            "https://smart-report-jade.vercel.app",
+            "https://jx-report.nfeyre.top"
         ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
