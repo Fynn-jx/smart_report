@@ -352,9 +352,11 @@ class OpenAIClient:
         else:
             obj = {"raw": str(completion)}
 
-        # 调试：打印原始响应结构
-        print(f"[DEBUG] API response type: {type(completion)}")
-        print(f"[DEBUG] Response keys: {obj.keys() if isinstance(obj, dict) else 'not a dict'}")
+        # 调试日志
+        print(f"[DEBUG] Completion type: {type(completion)}")
+        print(f"[DEBUG] Response keys: {list(obj.keys()) if isinstance(obj, dict) else 'not a dict'}")
+        import json
+        print(f"[DEBUG] Response preview: {json.dumps(obj, ensure_ascii=False)[:500]}...")
 
         walk(obj)
         print(f"[DEBUG] Extracted {len(items)} image items")
@@ -364,13 +366,6 @@ class OpenAIClient:
         """从API响应中获取图片"""
         all_items = self.extract_image_from_completion(completion)
         if not all_items:
-            # 调试：打印完整响应用于排查
-            print(f"[DEBUG] No image found! Raw response:")
-            if hasattr(completion, "model_dump"):
-                import json
-                print(json.dumps(completion.model_dump(), indent=2, ensure_ascii=False)[:2000])
-            else:
-                print(str(completion)[:2000])
             raise Exception("No image found in response")
 
         image_item = all_items[0]
