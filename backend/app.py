@@ -1,4 +1,5 @@
 import os
+import sys
 import requests
 import json
 import time
@@ -11,6 +12,30 @@ from openai import OpenAI
 import io
 import base64
 import re
+
+# ============= Windows 编码修复 =============
+if sys.platform == 'win32':
+    # 设置标准输出使用 UTF-8 编码
+    import io as sys_io
+    sys.stdout = sys_io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='ignore')
+    sys.stderr = sys_io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='ignore')
+
+    # 重写内置 print 函数，确保忽略编码错误
+    _original_print = print
+    def safe_print(*args, **kwargs):
+        try:
+            _original_print(*args, **kwargs)
+        except UnicodeEncodeError:
+            # 如果打印失败，过滤掉非 GBK 字符后重试
+            safe_args = []
+            for arg in args:
+                if isinstance(arg, str):
+                    safe_args.append(arg.encode('gbk', errors='ignore').decode('gbk'))
+                else:
+                    safe_args.append(arg)
+            _original_print(*safe_args, **kwargs)
+    import builtins
+    builtins.print = safe_print
 
 # ============= 配置区域 =============
 # Dify API Keys
@@ -54,7 +79,8 @@ def write_log(message):
     log_entry = f"[{timestamp}] {message}\n"
     with open(LOG_FILE, 'a', encoding='utf-8') as f:
         f.write(log_entry)
-    print(message)
+    # 安全输出：忽略无法编码的字符
+    print(message.encode('utf-8', errors='ignore').decode('utf-8'))
 
 
 app = Flask(__name__)
@@ -62,6 +88,7 @@ CORS(app, resources={
     r"/api/*": {
         "origins": [
             "http://localhost:5173",
+            "http://localhost:5174",
             "http://localhost:3000",
             "https://banksmart-report.vercel.app",
             "https://smart-report-jade.vercel.app"
