@@ -6,6 +6,10 @@ from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 from typing import Optional, Generator
 from datetime import datetime
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
 
 # ============= 配置区域 =============
 ACADEMIC_TO_OFFICIAL_API_KEY = "app-yVGdpuEwALJTY7CeSkxuNpDo"  # Dify API Key for 学术报告转公文
@@ -17,6 +21,7 @@ APP_ID = "Dify"  # Dify App ID
 
 # 后端配置
 BACKEND_PORT = 5000
+FEEDBACK_FILE = 'feedbacks.json'  # 反馈数据存储文件（备用）
 
 # 处理参数
 UPLOAD_TIMEOUT = 120      # 文件上传超时（秒）
@@ -36,8 +41,63 @@ def write_log(message):
     log_entry = f"[{timestamp}] {message}\n"
     with open(LOG_FILE, 'a', encoding='utf-8') as f:
         f.write(log_entry)
-    print(message)  # 同时打印到控制台
+    # 安全地打印到控制台，避免编码错误
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        # 如果有编码错误，使用 ASCII 替代
+        safe_message = message.encode('ascii', errors='ignore').decode('ascii')
+        print(safe_message)
 
+# 导入 Supabase 客户端（放在 write_log 之后）
+try:
+    from supabase_client import db
+    SUPABASE_ENABLED = True
+    write_log("[OK] Supabase database enabled")
+except Exception as e:
+    SUPABASE_ENABLED = False
+    print(f"[WARN] Supabase not configured, using file storage: {e}")
+
+
+# ============= 反馈功能 =============
+
+def load_feedbacks():
+    """加载所有反馈"""
+    if not os.path.exists(FEEDBACK_FILE):
+        return []
+    try:
+        with open(FEEDBACK_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        write_log(f"加载反馈文件失败: {e}")
+        return []
+
+
+def save_feedback(feedback_data):
+    """保存反馈到文件"""
+    try:
+        feedbacks = load_feedbacks()
+        feedbacks.append(feedback_data)
+        with open(FEEDBACK_FILE, 'w', encoding='utf-8') as f:
+            json.dump(feedbacks, f, ensure_ascii=False, indent=2)
+        write_log(f"✓ 反馈已保存: {feedback_data.get('id')}")
+        return True
+    except Exception as e:
+        write_log(f"✗ 保存反馈失败: {e}")
+        return False
+
+
+def format_feedback_type(type_value):
+    """格式化反馈类型"""
+    type_map = {
+        'issue': '问题反馈',
+        'suggestion': '功能建议',
+        'other': '其他'
+    }
+    return type_map.get(type_value, type_value)
+
+
+# ========================================
 
 app = Flask(__name__)
 CORS(app)
@@ -292,14 +352,37 @@ def convert_to_official():
         file_id = data.get('file_id')
         user = data.get('user', 'default')
         output_format = data.get('output_format', 'docx')
+        reference_files = data.get('reference_files', [])  # 获取参考文件ID列表
 
         if not file_id:
             return jsonify({"error": "file_id is required"}), 400
 
         write_log(f"\n{'='*60}")
         write_log(f"转公文请求: file_id={file_id}, format={output_format}")
+        write_log(f"参考文件数量: {len(reference_files)}")
+
+        # ============= 创建数据库记录 =============
+        # 如果启用了 Supabase，创建转换记录
+        record_id = None
+        if SUPABASE_ENABLED and db:
+            record_id = db.create_conversion_record(
+                user_id=user,
+                task_type='academic_convert',
+                input_file_name=data.get('file_name', 'document.pdf'),
+                input_file_id=file_id,
+                reference_file_name=data.get('reference_name', ''),
+                reference_file_id=reference_files[0] if reference_files else None,
+                extra_params={
+                    'output_format': output_format,
+                    'reference_files_count': len(reference_files)
+                }
+            )
+            if record_id:
+                write_log(f"Created conversion record: {record_id}")
+        # =====================================
 
         # 构建工作流输入
+        # wenjian: 必填的学术报告文件
         workflow_inputs = {
             "wenjian": {
                 "type": "document",
@@ -307,6 +390,17 @@ def convert_to_official():
                 "upload_file_id": file_id
             }
         }
+
+        # conference_file: 选填的参考文件
+        # 如果有参考文件，添加到工作流输入中（只支持一个参考文件）
+        if reference_files:
+            ref_file_id = reference_files[0]  # 只取第一个参考文件
+            workflow_inputs["conference_file"] = {
+                "type": "document",
+                "transfer_method": "local_file",
+                "upload_file_id": ref_file_id
+            }
+            write_log(f"已添加参考文件 conference_file 到工作流输入")
 
         client = init_dify_client()
         
@@ -428,7 +522,16 @@ def convert_to_official():
                     write_log(f"未知输出类型，输出对象: {output}")
             
             if output_url:
-                write_log(f"✓ 返回成功，输出URL: {output_url}")
+                write_log(f"[OK] Return success, output URL: {output_url}")
+
+                # 更新数据库记录为完成状态
+                if SUPABASE_ENABLED and db and record_id:
+                    db.update_conversion_record(
+                        record_id=record_id,
+                        status='completed',
+                        output_url=output_url
+                    )
+
                 return jsonify({
                     "success": True,
                     "output_url": output_url,
@@ -454,22 +557,59 @@ def convert_to_official():
                         output_url = output.get('data', '')
                     
                     if output_url:
-                        write_log(f"✓ 从历史数据中找到输出，返回成功，输出URL: {output_url}")
+                        write_log(f"[OK] Found output from history, output URL: {output_url}")
+
+                        # 更新数据库记录为完成状态
+                        if SUPABASE_ENABLED and db and record_id:
+                            db.update_conversion_record(
+                                record_id=record_id,
+                                status='completed',
+                                output_url=output_url
+                            )
+
                         return jsonify({
                             "success": True,
                             "output_url": output_url,
                             "filename": f"converted_document.{output_format}"
                         })
                     break
-        
-        write_log(f"✗ 返回错误：状态={workflow_status}, 输出数={len(outputs)}, 状态是否成功={workflow_status in success_statuses}")
+
+        write_log(f"[ERROR] Return error: status={workflow_status}, outputs={len(outputs)}")
+
+        # 更新数据库记录为错误状态
+        if SUPABASE_ENABLED and db and record_id:
+            db.update_conversion_record(
+                record_id=record_id,
+                status='error',
+                error_message=f"Workflow failed: status={workflow_status}"
+            )
+
         return jsonify({"error": "Workflow failed or no output generated"}), 500
 
     except requests.exceptions.Timeout:
-        write_log(f"转换超时")
+        write_log(f"Conversion timeout")
+
+        # 更新数据库记录为错误状态
+        if SUPABASE_ENABLED and db and record_id:
+            db.update_conversion_record(
+                record_id=record_id,
+                status='error',
+                error_message="Conversion timeout"
+            )
+
         return jsonify({"error": "Conversion timeout"}), 500
+
     except Exception as e:
-        write_log(f"转换异常: {e}")
+        write_log(f"Conversion error: {e}")
+
+        # 更新数据库记录为错误状态
+        if SUPABASE_ENABLED and db and record_id:
+            db.update_conversion_record(
+                record_id=record_id,
+                status='error',
+                error_message=str(e)
+            )
+
         return jsonify({"error": str(e)}), 500
 
 
@@ -536,9 +676,11 @@ def generate_country_report():
         country = data.get('country', 'egypt')
         report_type = data.get('report_type', 'situation')
         user = data.get('user', 'default')
+        reference_files = data.get('reference_files', [])  # 获取参考文件ID列表
 
         write_log(f"\n{'='*60}")
         write_log(f"国别报告请求: country={country}, type={report_type}")
+        write_log(f"参考文件数量: {len(reference_files)}")
 
         # 国家名称映射
         country_names = {
@@ -601,6 +743,16 @@ def generate_country_report():
             "COUNTRY": "https://www.mfa.gov.cn/web/gjhdq_676201/gj_676203/fz_677316/1206_677342/1206x0_677344/",
             "CHINA": "https://www.mfa.gov.cn/web/gjhdq_676201/gj_676203/fz_677316/1206_677342/sbgx_677346/"
         }
+
+        # 如果有参考文件，添加到工作流输入中（只支持一个参考文件）
+        if reference_files:
+            ref_file_id = reference_files[0]  # 只取第一个参考文件
+            workflow_inputs["conference_file"] = {
+                "type": "document",
+                "transfer_method": "local_file",
+                "upload_file_id": ref_file_id
+            }
+            write_log(f"已添加参考文件 conference_file 到工作流输入")
 
         # 使用国别报告专用的API Key
         client = DifyAPIClient(COUNTRY_REPORT_API_KEY, DIFY_BASE_URL)
@@ -784,9 +936,11 @@ def generate_quarterly_report():
 
         country = data.get('country', 'egypt')
         user = data.get('user', 'default')
+        reference_files = data.get('reference_files', [])  # 获取参考文件ID列表
 
         write_log(f"\n{'='*60}")
         write_log(f"季度报告请求: country={country}")
+        write_log(f"参考文件数量: {len(reference_files)}")
 
         # 国家名称映射
         country_names = {
@@ -838,6 +992,16 @@ def generate_quarterly_report():
             "AP_News": "https://apnews.com/article/egypt-fuel-prices-economy-inflation-diesel-gas-e001493d45c58389cbbe82899a37d74f",
             "El_Balad_News": "https://www.elbalad.news/#google_vignette"
         }
+
+        # 如果有参考文件，添加到工作流输入中（只支持一个参考文件）
+        if reference_files:
+            ref_file_id = reference_files[0]  # 只取第一个参考文件
+            workflow_inputs["conference_file"] = {
+                "type": "document",
+                "transfer_method": "local_file",
+                "upload_file_id": ref_file_id
+            }
+            write_log(f"已添加参考文件 conference_file 到工作流输入")
 
         # 使用季度报告专用的API Key
         client = DifyAPIClient(QUARTERLY_REPORT_API_KEY, DIFY_BASE_URL)
@@ -1177,6 +1341,349 @@ def translate_document():
         return jsonify({"error": str(e)}), 500
 
 
+# ============= 反馈API路由 =============
+
+@app.route('/api/feedback', methods=['POST'])
+def submit_feedback():
+    """提交反馈（支持 Supabase 和 JSON 文件）"""
+    try:
+        data = request.get_json()
+
+        # 验证必需字段
+        if not data.get('content'):
+            return jsonify({"error": "反馈内容不能为空"}), 400
+
+        # 如果启用了 Supabase，优先使用
+        if SUPABASE_ENABLED:
+            user_id = data.get('user_id', 'default')
+            feedback_type = data.get('type', 'other')
+            content = data.get('content', '').strip()
+            contact = data.get('contact')
+
+            write_log(f"提交反馈到 Supabase: type={feedback_type}")
+
+            feedback_id = db.create_feedback(user_id, feedback_type, content, contact)
+
+            if feedback_id:
+                return jsonify({
+                    "success": True,
+                    "message": "反馈提交成功",
+                    "feedback_id": feedback_id
+                }), 200
+            else:
+                return jsonify({"error": "提交失败"}), 500
+
+        # 否则使用 JSON 文件存储（备用）
+        feedback = {
+            "id": f"feedback_{datetime.now().strftime('%Y%m%d%H%M%S_%f')}",
+            "type": data.get('type', 'other'),
+            "content": data.get('content', '').strip(),
+            "contact": data.get('contact', ''),
+            "timestamp": data.get('timestamp', datetime.now().isoformat()),
+            "status": "pending",  # pending, reviewed, resolved
+            "created_at": datetime.now().isoformat()
+        }
+
+        # 保存反馈
+        if save_feedback(feedback):
+            return jsonify({
+                "success": True,
+                "message": "反馈提交成功",
+                "feedback_id": feedback["id"]
+            }), 200
+        else:
+            return jsonify({"error": "保存反馈失败"}), 500
+
+    except Exception as e:
+        write_log(f"提交反馈异常: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/feedback', methods=['GET'])
+def get_feedbacks():
+    """
+    获取所有反馈（管理员接口）
+    可选参数：
+    - status: 过滤状态 (pending, reviewed, resolved)
+    - type: 过滤类型 (issue, suggestion, other)
+    - limit: 限制返回数量
+    """
+    try:
+        # 获取查询参数
+        status_filter = request.args.get('status')
+        type_filter = request.args.get('type')
+        limit = request.args.get('limit', type=int)
+
+        # 加载所有反馈
+        feedbacks = load_feedbacks()
+
+        # 过滤
+        if status_filter:
+            feedbacks = [f for f in feedbacks if f.get('status') == status_filter]
+
+        if type_filter:
+            feedbacks = [f for f in feedbacks if f.get('type') == type_filter]
+
+        # 按时间倒序排序
+        feedbacks.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+
+        # 限制数量
+        if limit and limit > 0:
+            feedbacks = feedbacks[:limit]
+
+        # 格式化返回
+        formatted_feedbacks = []
+        for f in feedbacks:
+            formatted_feedbacks.append({
+                "id": f.get('id'),
+                "type": f.get('type'),
+                "type_label": format_feedback_type(f.get('type')),
+                "content": f.get('content'),
+                "contact": f.get('contact'),
+                "timestamp": f.get('timestamp'),
+                "status": f.get('status'),
+                "created_at": f.get('created_at')
+            })
+
+        return jsonify({
+            "success": True,
+            "count": len(formatted_feedbacks),
+            "feedbacks": formatted_feedbacks
+        }), 200
+
+    except Exception as e:
+        write_log(f"获取反馈异常: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/feedback/<feedback_id>', methods=['PATCH'])
+def update_feedback_status(feedback_id):
+    """
+    更新反馈状态（管理员接口）
+    参数：
+    - status: 新状态 (reviewed, resolved)
+    """
+    try:
+        data = request.get_json()
+        new_status = data.get('status')
+
+        if not new_status:
+            return jsonify({"error": "状态不能为空"}), 400
+
+        if new_status not in ['pending', 'reviewed', 'resolved']:
+            return jsonify({"error": "无效的状态值"}), 400
+
+        # 加载所有反馈
+        feedbacks = load_feedbacks()
+
+        # 查找并更新反馈
+        updated = False
+        for f in feedbacks:
+            if f.get('id') == feedback_id:
+                f['status'] = new_status
+                f['updated_at'] = datetime.now().isoformat()
+                updated = True
+                break
+
+        if not updated:
+            return jsonify({"error": "反馈不存在"}), 404
+
+        # 保存更新后的反馈
+        with open(FEEDBACK_FILE, 'w', encoding='utf-8') as f:
+            json.dump(feedbacks, f, ensure_ascii=False, indent=2)
+
+        write_log(f"✓ 反馈状态已更新: {feedback_id} -> {new_status}")
+        return jsonify({
+            "success": True,
+            "message": "状态更新成功"
+        }), 200
+
+    except Exception as e:
+        write_log(f"更新反馈状态异常: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/feedback/stats', methods=['GET'])
+def get_feedback_stats():
+    """
+    获取反馈统计信息（管理员接口）
+    """
+    try:
+        feedbacks = load_feedbacks()
+
+        stats = {
+            "total": len(feedbacks),
+            "by_status": {
+                "pending": len([f for f in feedbacks if f.get('status') == 'pending']),
+                "reviewed": len([f for f in feedbacks if f.get('status') == 'reviewed']),
+                "resolved": len([f for f in feedbacks if f.get('status') == 'resolved'])
+            },
+            "by_type": {
+                "issue": len([f for f in feedbacks if f.get('type') == 'issue']),
+                "suggestion": len([f for f in feedbacks if f.get('type') == 'suggestion']),
+                "other": len([f for f in feedbacks if f.get('type') == 'other'])
+            }
+        }
+
+        return jsonify({
+            "success": True,
+            "stats": stats
+        }), 200
+
+    except Exception as e:
+        write_log(f"获取统计信息异常: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ============= Supabase 数据库 API =============
+
+@app.route('/api/conversions', methods=['GET'])
+def get_conversions():
+    """
+    获取用户的转换历史记录
+    参数：
+    - user_id: 用户ID（默认：default）
+    - task_type: 任务类型过滤（可选）
+    - limit: 返回数量限制（默认：50）
+    """
+    try:
+        if not SUPABASE_ENABLED:
+            return jsonify({"error": "Database not enabled"}), 503
+
+        user_id = request.args.get('user_id', 'default')
+        task_type = request.args.get('task_type')
+        limit = int(request.args.get('limit', 50))
+
+        write_log(f"查询转换历史: user_id={user_id}, task_type={task_type}")
+
+        records = db.get_user_conversion_records(user_id, task_type, limit)
+
+        return jsonify({
+            "success": True,
+            "count": len(records),
+            "records": records
+        }), 200
+
+    except Exception as e:
+        write_log(f"获取转换历史异常: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/conversions/<record_id>', methods=['GET'])
+def get_conversion_record(record_id):
+    """获取单个转换记录详情"""
+    try:
+        if not SUPABASE_ENABLED:
+            return jsonify({"error": "Database not enabled"}), 503
+
+        write_log(f"查询转换记录详情: {record_id}")
+
+        record = db.get_conversion_record(record_id)
+
+        if record:
+            return jsonify({
+                "success": True,
+                "record": record
+            }), 200
+        else:
+            return jsonify({"error": "Record not found"}), 404
+
+    except Exception as e:
+        write_log(f"获取转换记录详情异常: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/feedbacks/supabase', methods=['GET'])
+def get_feedbacks_supabase():
+    """
+    从 Supabase 获取所有反馈（管理员接口）
+    参数：
+    - status: 状态过滤（可选）
+    - feedback_type: 类型过滤（可选）
+    - limit: 返回数量限制（默认：100）
+    """
+    try:
+        if not SUPABASE_ENABLED:
+            return jsonify({"error": "Database not enabled"}), 503
+
+        status = request.args.get('status')
+        feedback_type = request.args.get('feedback_type')
+        limit = int(request.args.get('limit', 100))
+
+        write_log(f"查询反馈列表: status={status}, type={feedback_type}")
+
+        feedbacks = db.get_all_feedbacks(status, feedback_type, limit)
+
+        return jsonify({
+            "success": True,
+            "count": len(feedbacks),
+            "feedbacks": feedbacks
+        }), 200
+
+    except Exception as e:
+        write_log(f"获取反馈列表异常: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/feedbacks/supabase/<feedback_id>', methods=['PATCH'])
+def update_feedback_supabase(feedback_id):
+    """
+    更新反馈状态（管理员接口，使用 Supabase）
+    参数：
+    - status: 新状态 (reviewed, resolved)
+    - admin_reply: 管理员回复（可选）
+    """
+    try:
+        if not SUPABASE_ENABLED:
+            return jsonify({"error": "Database not enabled"}), 503
+
+        data = request.get_json()
+        new_status = data.get('status')
+        admin_reply = data.get('admin_reply')
+
+        if not new_status:
+            return jsonify({"error": "status is required"}), 400
+
+        write_log(f"更新反馈状态: {feedback_id} -> {new_status}")
+
+        success = db.update_feedback_status(feedback_id, new_status, admin_reply)
+
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "状态更新成功"
+            }), 200
+        else:
+            return jsonify({"error": "Update failed"}), 500
+
+    except Exception as e:
+        write_log(f"更新反馈状态异常: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/feedbacks/supabase/stats', methods=['GET'])
+def get_feedback_stats_supabase():
+    """获取反馈统计信息（管理员接口，使用 Supabase）"""
+    try:
+        if not SUPABASE_ENABLED:
+            return jsonify({"error": "Database not enabled"}), 503
+
+        write_log("查询反馈统计信息")
+
+        stats = db.get_feedback_stats()
+
+        return jsonify({
+            "success": True,
+            "stats": stats
+        }), 200
+
+    except Exception as e:
+        write_log(f"获取反馈统计异常: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ======================================
+
 def main():
     """启动 Flask 服务器"""
     print("=" * 60)
@@ -1188,12 +1695,28 @@ def main():
     print("\n可用接口:")
     print("  - GET  /health - 健康检查")
     print("  - POST /api/dify/upload - 上传文档")
-    print("  - POST /api/dify/convert - 转公文（阻塔回复）")
-    print("  - POST /api/dify/convert-stream - 转公文（流式响应）")
+    print("  - POST /api/dify/convert - 转公文")
     print("  - POST /api/dify/country-report - 生成国别情况报告")
     print("  - POST /api/dify/quarterly-report - 生成季度研究报告")
     print("  - POST /api/dify/translate-document - 文档翻译")
+    print("  - POST /api/translate-image - 图片翻译")
+    print("")
+    print("  - POST /api/feedback - 提交反馈")
+    print("  - GET  /api/feedback - 获取所有反馈（JSON文件）")
+    print("  - GET  /api/feedback/stats - 获取反馈统计（JSON文件）")
+    print("  - PATCH /api/feedback/<id> - 更新反馈状态（JSON文件）")
+    print("")
+    print("  - GET  /api/conversions - 获取转换历史（Supabase）")
+    print("  - GET  /api/conversions/<id> - 获取转换记录详情（Supabase）")
+    print("  - GET  /api/feedbacks/supabase - 获取所有反馈（Supabase）")
+    print("  - GET  /api/feedbacks/supabase/stats - 获取反馈统计（Supabase）")
+    print("  - PATCH /api/feedbacks/supabase/<id> - 更新反馈状态（Supabase）")
     print("=" * 60)
+
+    if SUPABASE_ENABLED:
+        print("\n[OK] Supabase database enabled")
+    else:
+        print("\n[WARN] Supabase not configured, using file storage")
 
     app.run(host='127.0.0.1', port=BACKEND_PORT, debug=True)
 

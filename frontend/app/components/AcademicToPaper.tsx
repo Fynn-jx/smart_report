@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Upload, FileText, Loader2, Download, CheckCircle2, X, Languages, FileEdit } from 'lucide-react';
 import { StyleSelectionModal } from '@/components/Selection';
+import { ReferenceFileUpload } from '@/components/ReferenceFileUpload';
 import { getApiConfig } from '@/config/api';
 
 type OperationType = 'translate' | 'rewrite';
@@ -19,6 +20,8 @@ export function AcademicToPaper() {
   const [fileId, setFileId] = useState<string | null>(null);
   const [showStyleModal, setShowStyleModal] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState<string>('style1');
+  const [referenceFileIds, setReferenceFileIds] = useState<string[]>([]);
+  const [selectedOperation, setSelectedOperation] = useState<OperationType | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const apiConfig = getApiConfig();
 
@@ -188,6 +191,7 @@ export function AcademicToPaper() {
             user: 'default',
             output_format: 'docx',
             style: style,
+            reference_files: referenceFileIds, // 添加参考文件ID列表
           }),
         });
 
@@ -241,8 +245,25 @@ export function AcademicToPaper() {
     setUploadProgress(0);
     setProcessingStates([]);
     setFileId(null);
+    setSelectedOperation(null);
+    setReferenceFileIds([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  // 开始处理
+  const handleStartProcessing = async () => {
+    if (!selectedOperation) {
+      alert('请先选择操作类型');
+      return;
+    }
+
+    if (selectedOperation === 'translate') {
+      await handleOperation('translate');
+    } else if (selectedOperation === 'rewrite') {
+      // 如果是公文写作，先显示风格选择
+      setShowStyleModal(true);
     }
   };
 
@@ -325,13 +346,17 @@ export function AcademicToPaper() {
 
             {/* 操作选择 */}
             {!isUploading && (
-              <div>
+              <div className="space-y-6">
                 <label className="block mb-3 text-foreground">选择操作类型</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
-                    onClick={() => handleOperation('translate')}
+                    onClick={() => setSelectedOperation('translate')}
                     disabled={isUploading}
-                    className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-border hover:border-primary/50 hover:bg-accent/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`flex flex-col items-center gap-3 p-6 rounded-lg border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                      selectedOperation === 'translate'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                    }`}
                   >
                     <div className="w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
                       <Languages className="w-6 h-6 text-blue-600" />
@@ -345,9 +370,13 @@ export function AcademicToPaper() {
                   </button>
 
                   <button
-                    onClick={() => handleOperation('rewrite')}
+                    onClick={() => setSelectedOperation('rewrite')}
                     disabled={isUploading}
-                    className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-border hover:border-primary/50 hover:bg-accent/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`flex flex-col items-center gap-3 p-6 rounded-lg border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                      selectedOperation === 'rewrite'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                    }`}
                   >
                     <div className="w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
                       <FileEdit className="w-6 h-6 text-green-600" />
@@ -360,6 +389,31 @@ export function AcademicToPaper() {
                     </div>
                   </button>
                 </div>
+
+                {/* 参考文件上传区域 - 只在选择"公文写作"时显示 */}
+                {selectedOperation === 'rewrite' && (
+                  <div className="pt-4 border-t border-border">
+                    <ReferenceFileUpload
+                      onFileIdsChange={setReferenceFileIds}
+                      disabled={isUploading}
+                      maxFiles={1}
+                    />
+                  </div>
+                )}
+
+                {/* 开始处理按钮 - 选择操作后才显示 */}
+                {selectedOperation && (
+                  <button
+                    onClick={handleStartProcessing}
+                    disabled={isUploading}
+                    className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Upload className="w-5 h-5" />
+                    <span className="font-medium">
+                      {selectedOperation === 'translate' ? '开始翻译' : '开始写作'}
+                    </span>
+                  </button>
+                )}
               </div>
             )}
           </div>

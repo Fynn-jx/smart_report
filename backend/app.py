@@ -42,7 +42,7 @@ if sys.platform == 'win32':
 ACADEMIC_TO_OFFICIAL_API_KEY = "app-yVGdpuEwALJTY7CeSkxuNpDo"
 COUNTRY_SITUATION_API_KEY = "app-IWiuVAJEEBP8zoDUOME7XKKG"
 QUARTERLY_REPORT_API_KEY = "app-IzeCySdSIPnMPXGakcgZU4Ry"
-TRANSLATE_API_KEY = "app-nWremBnU8z7Dq4fm6RXGU2fp"
+TRANSLATE_API_KEY = "app-zOtHAWgDNbML1fVxYumul5O1"
 DIFY_BASE_URL = "https://api.dify.ai/v1"
 
 # OpenAI API Key（用于图片翻译）
@@ -95,10 +95,14 @@ CORS(app, resources={
             "https://jx-report.nfeyre.top",
             "https://smartdocx.jxchen.me"
         ],
-        "methods": ["GET", "POST", "OPTIONS"],
+        "methods": ["GET", "POST", "OPTIONS", "PATCH", "DELETE"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
 })
+
+# 注册文档管理路由
+from document_local_api import register_document_routes
+register_document_routes(app)
 
 
 class DifyAPIClient:
@@ -492,6 +496,17 @@ def convert_to_official():
             "style": style
         }
 
+        # 获取参考文件（选填）
+        reference_files = data.get('reference_files', [])
+        if reference_files:
+            ref_file_id = reference_files[0]  # 只取第一个参考文件
+            workflow_inputs["conference_file"] = {
+                "type": "document",
+                "transfer_method": "local_file",
+                "upload_file_id": ref_file_id
+            }
+            write_log(f"已添加参考文件 conference_file 到工作流输入")
+
         client = init_dify_client()
         
         write_log("使用流式响应模式...")
@@ -759,7 +774,7 @@ def convert_to_official_streaming():
         workflow_inputs = {
             "file": {
                 "type": "document",
-                "transfer_method": "remote_file",
+                "transfer_method": "local_file",
                 "upload_file_id": file_id
             },
             "prompt": f"请将上传的文档转换为公文格式。要求：使用标准公文格式、正式语体、规范的版式布局。输出格式为{output_format}。"
@@ -1033,7 +1048,7 @@ def generate_country_report():
         country_name = country_names.get(country, country)
 
         workflow_inputs = {
-            "Country": country,
+            "Country": country_name,
             "Report_Type": report_type,
             "Inflation_Rate": "https://zh.tradingeconomics.com/egypt/gdp-growth-annual",
             "Unemployment_Rate": "https://zh.tradingeconomics.com/egypt/government-debt-to-gdp",
@@ -1056,6 +1071,17 @@ def generate_country_report():
             "COUNTRY": "https://www.mfa.gov.cn/web/gjhdq_676201/gj_676203/fz_677316/1206_677342/1206x0_677344/sbgx_677346/",
             "CHINA": "https://www.mfa.gov.cn/web/gjhdq_676201/gj_676203/fz_677316/1206_677342/sbgx_677346/"
         }
+
+        # 获取参考文件（选填）
+        reference_files = data.get('reference_files', [])
+        if reference_files:
+            ref_file_id = reference_files[0]  # 只取第一个参考文件
+            workflow_inputs["conference_file"] = {
+                "type": "document",
+                "transfer_method": "local_file",
+                "upload_file_id": ref_file_id
+            }
+            write_log(f"已添加参考文件 conference_file 到工作流输入")
 
         client = DifyAPIClient(COUNTRY_SITUATION_API_KEY, DIFY_BASE_URL)
 
@@ -1324,6 +1350,17 @@ def generate_quarterly_report():
             "AP_News": "https://apnews.com/article/egypt-fuel-prices-economy-inflation-diesel-gas-e001493d45c58389cbbe82899a37d74f",
             "El_Balad_News": "https://www.elbalad.news/#google_vignette"
         }
+
+        # 获取参考文件（选填）
+        reference_files = data.get('reference_files', [])
+        if reference_files:
+            ref_file_id = reference_files[0]  # 只取第一个参考文件
+            workflow_inputs["conference_file"] = {
+                "type": "document",
+                "transfer_method": "local_file",
+                "upload_file_id": ref_file_id
+            }
+            write_log(f"已添加参考文件 conference_file 到工作流输入")
 
         client = DifyAPIClient(QUARTERLY_REPORT_API_KEY, DIFY_BASE_URL)
 

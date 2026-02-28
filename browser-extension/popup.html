@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>公文系统文献助手</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 420px;
+      min-height: 300px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 16px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .logo {
+      font-size: 24px;
+      font-weight: bold;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: #666;
+    }
+
+    .status {
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+
+    .status.no-pdf {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .status.has-pdf {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+
+    .status.has-multiple {
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fde68a;
+    }
+
+    .status.saving {
+      background: #e0e7ff;
+      color: #3730a3;
+      border: 1px solid #c7d2fe;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 4px;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-secondary {
+      background: white;
+      color: #667eea;
+      border: 1px solid #667eea;
+      margin-top: 8px;
+    }
+
+    .btn-secondary:hover {
+      background: #f5f3ff;
+    }
+
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+      width: auto;
+    }
+
+    /* 结果列表样式 */
+    .results-list {
+      max-height: 300px;
+      overflow-y: auto;
+      margin-bottom: 16px;
+    }
+
+    .result-item {
+      padding: 12px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .result-item:hover {
+      border-color: #667eea;
+      background: #f5f3ff;
+    }
+
+    .result-item.selected {
+      border-color: #667eea;
+      background: #ede9fe;
+    }
+
+    .result-title {
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .result-url {
+      font-size: 11px;
+      color: #666;
+      word-break: break-all;
+      margin-bottom: 4px;
+    }
+
+    .result-meta {
+      font-size: 10px;
+      color: #999;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 500;
+    }
+
+    .badge-high {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .badge-medium {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .badge-low {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .toggle-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 8px;
+      margin-bottom: 12px;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      color: #374151;
+      transition: all 0.2s;
+    }
+
+    .toggle-button:hover {
+      background: #e5e7eb;
+    }
+
+    .toggle-button svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .manual-input {
+      padding: 12px;
+      background: #f0fdf4;
+      border: 1px dashed #86efac;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+
+    .manual-input-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: #166534;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .saved-list {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .saved-list h3 {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+
+    .saved-item {
+      padding: 8px;
+      background: #f9fafb;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+
+    .saved-item .title {
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 4px;
+    }
+
+    .saved-item .url {
+      color: #666;
+      word-break: break-all;
+    }
+
+    .footer {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #e5e7eb;
+      text-align: center;
+    }
+
+    .footer a {
+      font-size: 12px;
+      color: #667eea;
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    .warning-text {
+      font-size: 11px;
+      color: #92400e;
+      margin-top: 4px;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">📚 文献助手</div>
+      <div class="subtitle">公文系统文档收集工具</div>
+    </div>
+
+    <div id="status" class="status no-pdf">
+      正在检测页面文档...
+    </div>
+
+    <!-- 检测结果列表 -->
+    <div id="resultsSection" class="hidden">
+      <div class="toggle-button" id="toggleManual">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+        </svg>
+        <span>手动输入PDF链接</span>
+      </div>
+
+      <div id="resultsList" class="results-list">
+        <!-- 检测结果会动态插入这里 -->
+      </div>
+
+      <div id="manualInput" class="manual-input hidden">
+        <div class="manual-input-title">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          手动输入PDF链接
+        </div>
+        <div class="form-group">
+          <input
+            type="text"
+            id="manualUrl"
+            placeholder="粘贴PDF链接或下载地址..."
+          />
+        </div>
+        <div class="form-group">
+          <input
+            type="text"
+            id="manualTitle"
+            placeholder="文档标题（可选）"
+          />
+        </div>
+        <button id="useManualBtn" class="btn btn-small btn-secondary">
+          使用手动输入的链接
+        </button>
+      </div>
+    </div>
+
+    <!-- 保存表单 -->
+    <div id="content" style="display: none;">
+      <div class="form-group">
+        <label for="docTitle">文档标题</label>
+        <input
+          type="text"
+          id="docTitle"
+          placeholder="自动检测或手动输入"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="docUrl">文档链接</label>
+        <input
+          type="text"
+          id="docUrl"
+          readonly
+          style="background: #f9fafb; color: #666; font-size: 11px;"
+        />
+        <div id="needsClickWarning" class="warning-text hidden">
+          ⚠️ 此按钮需要点击后才能获取实际链接，请手动点击网页上的按钮，然后复制链接
+        </div>
+      </div>
+
+      <button id="saveBtn" class="btn btn-primary">
+        💾 保存到文献库
+      </button>
+
+      <button id="downloadBtn" class="btn btn-secondary">
+        ⬇️ 下载到本地
+      </button>
+
+      <button id="backBtn" class="btn btn-secondary" style="border-color: #d1d5db; color: #666;">
+        ← 返回选择
+      </button>
+    </div>
+
+    <div id="saved" class="saved-list" style="display: none;">
+      <h3>本次会话已保存</h3>
+      <div id="savedItems"></div>
+    </div>
+
+    <div class="footer">
+      <a href="http://localhost:5173" target="_blank">
+        🚀 打开文献库
+      </a>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

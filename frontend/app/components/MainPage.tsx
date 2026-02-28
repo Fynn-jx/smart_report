@@ -1,22 +1,28 @@
 import { useState } from 'react';
-import { FileText, Globe, ImageIcon, LogOut } from 'lucide-react';
+import { FileText, Globe, ImageIcon, LogOut, MessageCircle, Clock, Folder } from 'lucide-react';
 import { AcademicToPaper } from '@/components/AcademicToPaper';
 import { CountryReport } from '@/components/CountryReport';
 import { ImageTranslation } from '@/components/ImageTranslation';
+import { FeedbackModal } from '@/components/FeedbackModal';
+import { History } from '@/components/History';
+import { DocumentLibrary } from '@/components/DocumentLibrary';
 
 interface MainPageProps {
   onLogout: () => void;
 }
 
-type TabType = 'academic' | 'country' | 'image';
+type TabType = 'academic' | 'country' | 'image' | 'history' | 'library';
 
 export function MainPage({ onLogout }: MainPageProps) {
   const [activeTab, setActiveTab] = useState<TabType>('academic');
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   const tabs = [
     { id: 'academic' as TabType, label: '学术报告转公文', icon: FileText },
     { id: 'country' as TabType, label: '国别研究报告', icon: Globe },
     { id: 'image' as TabType, label: '图片转译', icon: ImageIcon },
+    { id: 'library' as TabType, label: '文档库', icon: Folder },
+    { id: 'history' as TabType, label: '历史记录', icon: Clock },
   ];
 
   return (
@@ -25,18 +31,27 @@ export function MainPage({ onLogout }: MainPageProps) {
       <header className="border-b border-border bg-card">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10">
+            <div className="w-25 h-25">
               <img src="/images/logo.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
-            <h1 className="text-foreground">公文撰写系统</h1>
+            <h1 className="text-foreground">中国人民银行智能公文系统</h1>
           </div>
-          <button
-            onClick={onLogout}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>退出登录</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowFeedbackModal(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>反馈</span>
+            </button>
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>退出登录</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -71,8 +86,16 @@ export function MainPage({ onLogout }: MainPageProps) {
           {activeTab === 'academic' && <AcademicToPaper />}
           {activeTab === 'country' && <CountryReport />}
           {activeTab === 'image' && <ImageTranslation />}
+          {activeTab === 'library' && <DocumentLibrary />}
+          {activeTab === 'history' && <History />}
         </div>
       </main>
+
+      {/* 反馈模态框 */}
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+      />
     </div>
   );
 }

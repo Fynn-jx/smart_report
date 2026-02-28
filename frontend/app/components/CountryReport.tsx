@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Globe, Loader2, Download, CheckCircle2, ChevronDown } from 'lucide-react';
 import { CountrySelectionModal } from '@/components/CountrySelectionModal';
+import { ReferenceFileUpload } from '@/components/ReferenceFileUpload';
 import { getApiConfig } from '@/config/api';
 
 type ReportType = 'situation' | 'quarterly';
@@ -46,6 +47,7 @@ export function CountryReport() {
   const [status, setStatus] = useState<ProcessStatus>('idle');
   const [result, setResult] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [referenceFileIds, setReferenceFileIds] = useState<string[]>([]);
   const apiConfig = getApiConfig();
 
   const handleGenerate = async () => {
@@ -69,7 +71,8 @@ export function CountryReport() {
         },
         body: JSON.stringify({
           country: country,
-          user: 'default'
+          user: 'default',
+          reference_files: referenceFileIds, // 添加参考文件ID列表
         }),
       });
 
@@ -181,6 +184,15 @@ export function CountryReport() {
                 <span className="text-foreground">季度研究报告</span>
               </button>
             </div>
+          </div>
+
+          {/* 参考文件上传区域 */}
+          <div className="pt-4 border-t border-border">
+            <ReferenceFileUpload
+              onFileIdsChange={setReferenceFileIds}
+              disabled={status === 'processing'}
+              maxFiles={1}
+            />
           </div>
 
           <button

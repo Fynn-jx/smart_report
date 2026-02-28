@@ -10,17 +10,17 @@ type StyleSelectionModalProps = {
 const styles = [
   {
     id: 'style1',
-    name: '风格1',
+    name: '严谨规范型',
     color: 'blue',
   },
   {
     id: 'style2',
-    name: '风格2',
+    name: '务实数据型',
     color: 'green',
   },
   {
     id: 'style3',
-    name: '风格3',
+    name: '亲和专业型',
     color: 'purple',
   },
 ];

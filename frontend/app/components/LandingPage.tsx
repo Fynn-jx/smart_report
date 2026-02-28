@@ -1,6 +1,4 @@
 import { FileText, Globe, Image, ArrowRight, CheckCircle } from 'lucide-react';
-// Figma Make 导出的图片资源不在项目中，暂时移除
-// import exampleImage from 'figma:asset/257b110b8ef98034b603277ecff85516d41e4f03.png';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -32,10 +30,10 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
         <nav className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10">
+              <div className="w-25 h-25">
                 <img src="/images/logo.png" alt="Logo" className="w-full h-full object-contain" />
               </div>
-              <span className="font-medium text-foreground">公文撰写系统</span>
+              <span className="font-medium text-foreground">中国人民银行智能公文系统</span>
             </div>
 
             <div className="hidden md:flex items-center gap-8">
@@ -66,21 +64,21 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
           {/* Left Content */}
           <div className="space-y-8">
             <div className="inline-block px-4 py-2 rounded-full bg-primary/10 text-primary border border-primary/20">
-              智能公文处理平台
+              中国人民银行智能公文系统
             </div>
             
             <h1 className="text-5xl md:text-6xl leading-tight text-foreground">
               高效处理
               <br />
               <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                公文撰写
+                公文写作
               </span>
               <br />
               智能化转译
             </h1>
 
             <p className="text-xl text-muted-foreground leading-relaxed">
-              基于先进的AI技术，为您提供专业的学术报告转换、国别研究分析和图片智能转译服务。让公文处理更简单、更高效。
+              基于先进的AI技术，为您提供专业的学术报告转换、国别研究分析和图片智能转译服务。让公文写作更简单、更高效。
             </p>
 
             <div className="flex flex-wrap gap-4">
@@ -184,13 +182,13 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
               <h2 className="mb-6">关于我们</h2>
               <div className="space-y-4 text-muted-foreground leading-relaxed">
                 <p>
-                  我们致力于通过AI技术提升公文处理效率，为政府机构、研究单位和企业提供专业的智能化解决方案。
+                  我们致力于通过AI技术提升公文处理效率，为中国人民银行提供专业的智能化解决方案。
                 </p>
                 <p>
                   系统基于Dify工作流引擎，结合先进的自然语言处理技术，能够准确理解文档内容，自动生成符合规范的公文格式。
                 </p>
                 <p>
-                  我们的目标是让公文撰写变得更简单、更高效，让用户能够专注于内容本身，提高撰写效率和报告深度。
+                  我们的目标是让公文写作变得更简单、更高效，让用户能够专注于内容本身，提高撰写效率和报告深度。
                 </p>
               </div>
             </div>

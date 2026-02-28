@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- ���景圆角矩形 -->
+  <rect x="2" y="2" width="124" height="124" rx="24" ry="24" fill="url(#gradient)"/>
+
+  <!-- 渐变定义 -->
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- 书本图标 -->
+  <g transform="translate(24, 24)">
+    <!-- 书本底部 -->
+    <path d="M10 80 L10 20 Q40 25 70 20 L70 80 Q40 85 10 80 Z" fill="#ffffff" opacity="0.95"/>
+    <path d="M30 80 L30 20" stroke="#764ba2" stroke-width="2" fill="none"/>
+
+    <!-- 书页效果 -->
+    <path d="M10 80 Q10 85 15 85 L65 85 Q70 85 70 80 L70 20 Q70 15 65 15 L15 15 Q10 15 10 20"
+          fill="none" stroke="#ffffff" stroke-width="2"/>
+
+    <!-- PDF文字 -->
+    <text x="40" y="65" font-family="Arial, sans-serif" font-size="22" font-weight="bold"
+          fill="#667eea" text-anchor="middle">PDF</text>
+  </g>
+
+  <!-- 右上角的小勾 -->
+  <circle cx="100" cy="28" r="16" fill="#10b981"/>
+  <path d="M92 28 L97 33 L108 22" stroke="#ffffff" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>
