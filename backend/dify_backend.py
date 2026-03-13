@@ -58,6 +58,14 @@ except Exception as e:
     SUPABASE_ENABLED = False
     print(f"[WARN] Supabase not configured, using file storage: {e}")
 
+# 导入文档 API
+try:
+    from document_api import register_document_routes
+    register_document_routes(app)
+    write_log("[OK] Document API routes registered")
+except Exception as e:
+    print(f"[WARN] Document API not available: {e}")
+
 
 # ============= 反馈功能 =============
 

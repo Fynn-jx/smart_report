@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { LogIn } from 'lucide-react';
 
 interface LoginPageProps {
@@ -9,11 +9,21 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
+  // 检查是否已登录
+  useEffect(() => {
+    const isLoggedIn = localStorage.getItem('isLoggedIn');
+    if (isLoggedIn === 'true') {
+      onLogin();
+    }
+  }, [onLogin]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // TODO: 连接到您的后端认证API
     // 这里使用模拟登录
     if (username && password) {
+      // 保存登录状态到 localStorage
+      localStorage.setItem('isLoggedIn', 'true');
       onLogin();
     }
   };

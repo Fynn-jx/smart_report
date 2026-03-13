@@ -2,11 +2,64 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   FileText, FileEdit, Folder, Plus, Search, Tag, Trash2, Edit3,
   Download, Star, MoreVertical, FolderPlus, BookOpen,
-  ExternalLink, Upload, Languages, X, Move, FileDown
+  ExternalLink, Upload, Languages, X, Move, FileDown, Globe
 } from 'lucide-react';
 import { getApiConfig } from '@/config/api';
 import { DocumentDetailDialog } from './DocumentDetailDialog';
+
+// 从URL中提取网站名称
+const extractWebsiteName = (url: string): string => {
+  if (!url) return '';
+  try {
+    const urlObj = new URL(url);
+    const hostname = urlObj.hostname.replace('www.', '');
+
+    // 常见网站映射
+    const websiteMap: Record<string, string> = {
+      'worldbank.org': '世界银行',
+      'wb': '世界银行',
+      'imf.org': 'IMF国际货币基金组织',
+      'un.org': '联合国',
+      'unea': '联合国非洲经济委员会',
+      'uneca': '联合国非洲经济委员会',
+      'afdb.org': '非洲开发银行',
+      'africandevelopmentbank': '非洲开发银行',
+      'wto.org': 'WTO世贸组织',
+      'oecd.org': 'OECD经合组织',
+      'asia.nielsen.com': 'Nielsen尼尔森',
+      'nielsen.com': 'Nielsen尼尔森',
+      'mckinsey.com': 'McKinsey麦肯锡',
+      'bcg.com': 'BCG波士顿咨询',
+      'bain.com': 'Bain贝恩',
+      'forrester.com': 'Forrester',
+      'gartner.com': 'Gartner',
+      'centralbank.gov.cn': '中国人民银行',
+      'pbc.gov.cn': '中国人民银行',
+      'stats.gov.cn': '国家统计局',
+      'gov.cn': '中国政府网',
+      'cn': '中国',
+    };
+
+    // 检查是否匹配已知网站
+    for (const [key, name] of Object.entries(websiteMap)) {
+      if (hostname.includes(key)) {
+        return name;
+      }
+    }
+
+    // 返回主机名（去掉.com/.org等后缀前的部分）
+    const parts = hostname.split('.');
+    if (parts.length >= 2) {
+      return parts[parts.length - 2].charAt(0).toUpperCase() + parts[parts.length - 2].slice(1);
+    }
+    return hostname;
+  } catch {
+    return '';
+  }
+};
 import { FolderManagerDialog } from './FolderManagerDialog';
+import { PDFPreview } from './PDFPreview';
+import { WebsiteSelectionModal } from './WebsiteSelectionModal';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +70,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog';
+
+interface DocumentTag {
+  label: string;
+  color?: string;
+}
 
 interface Document {
   id: string;
@@ -24,7 +88,7 @@ interface Document {
   filename: string;
   source_url?: string;
   source_type: 'plugin' | 'manual' | 'upload';
-  tags: string[];
+  tags: (string | DocumentTag)[];
   notes?: string;
   folder: string;
   file_size: number;
@@ -39,9 +103,19 @@ interface Folder {
   count: number;
 }
 
+// Helper function to get tag label string
+function getTagLabel(tag: string | DocumentTag): string {
+  if (typeof tag === 'object' && tag !== null && 'label' in tag) {
+    return tag.label;
+  }
+  return String(tag);
+}
+
 export function DocumentLibrary() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
+  const [websites, setWebsites] = useState<{id: string, name: string, count: number}[]>([]);
+  const [selectedWebsite, setSelectedWebsite] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [selectedFolder, setSelectedFolder] = useState<string>('全部');
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,6 +130,22 @@ export function DocumentLibrary() {
   const [showBatchDeleteDialog, setShowBatchDeleteDialog] = useState(false);
   const [showBatchMoveDialog, setShowBatchMoveDialog] = useState(false);
   const [batchMoveTarget, setBatchMoveTarget] = useState<string>('');
+  const [showWebsiteModal, setShowWebsiteModal] = useState(false);
+
+  // Preview state
+  const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // 清理 blob URL 避免内存泄漏
+  useEffect(() => {
+    return () => {
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   const fetchDocuments = async () => {
     setLoading(true);
@@ -67,12 +157,23 @@ export function DocumentLibrary() {
         url.searchParams.set('folder', selectedFolder);
       }
 
+      if (selectedWebsite) {
+        url.searchParams.set('website', selectedWebsite);
+      }
+
       const response = await fetch(url.toString());
       if (!response.ok) throw new Error('获取文档失败');
       const data = await response.json();
 
       if (data.success) {
-        setDocuments(data.documents || []);
+        // Normalize tags to strings
+        const normalizedDocs = (data.documents || []).map((doc: any) => ({
+          ...doc,
+          tags: (doc.tags || []).map((tag: any) =>
+            typeof tag === 'object' && tag !== null ? String(tag.label || '') : String(tag)
+          )
+        }));
+        setDocuments(normalizedDocs);
       } else {
         throw new Error(data.error || '获取失败');
       }
@@ -113,11 +214,33 @@ export function DocumentLibrary() {
     }
   };
 
+  const fetchWebsites = async () => {
+    try {
+      const response = await fetch(`${apiConfig.BASE_URL}/api/websites?user_id=default`);
+      const data = await response.json();
+      if (data.success) {
+        setWebsites(data.websites || []);
+      }
+    } catch (error) {
+      console.error('获取网站列表失败:', error);
+    }
+  };
+
   useEffect(() => {
     fetchDocuments();
     fetchFolders();
     fetchStats();
   }, [selectedFolder]);
+
+  // 网站筛选变化时重新获取文档
+  useEffect(() => {
+    fetchDocuments();
+  }, [selectedWebsite]);
+
+  // 初始加载时获取网站列表
+  useEffect(() => {
+    fetchWebsites();
+  }, []);
 
   const filteredDocuments = useMemo(() => {
     let filtered = documents;
@@ -133,7 +256,7 @@ export function DocumentLibrary() {
       filtered = filtered.filter(d =>
         d.title.toLowerCase().includes(query) ||
         d.filename.toLowerCase().includes(query) ||
-        d.tags?.some(tag => tag.toLowerCase().includes(query))
+        d.tags?.some(tag => getTagLabel(tag).toLowerCase().includes(query))
       );
     }
 
@@ -211,17 +334,34 @@ export function DocumentLibrary() {
     }
   };
 
-  const handleOpenDocument = (doc: Document) => {
-    if (doc.source_type === 'plugin') {
-      alert('文件已由浏览器插件保存到本地文件夹，请在本地文件夹中找到并打开');
-    } else if (doc.source_type === 'manual') {
-      if (doc.source_url) {
-        window.open(doc.source_url, '_blank');
-      } else {
-        alert('该文件需要重新上传');
+  const handleOpenDocument = async (doc: Document) => {
+    setPreviewLoading(true);
+    setShowPreview(true);
+    setPreviewDoc(doc);
+
+    // 清理之前的 blob URL
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
+    try {
+      // 使用后端代理下载文档（解决跨域问题）
+      const response = await fetch(`${apiConfig.BASE_URL}/api/documents/${doc.id}/download`);
+
+      if (!response.ok) {
+        throw new Error('下载失败');
       }
-    } else if (doc.source_type === 'upload') {
-      alert('请使用对应功能的结果页面进行操作');
+
+      const blob = await response.blob();
+      // 创建 Blob URL 用于预览
+      const blobUrl = URL.createObjectURL(blob);
+      setPreviewUrl(blobUrl);
+    } catch (error) {
+      console.error('获取预览失败:', error);
+      alert('获取预览失败');
+      setShowPreview(false);
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -309,11 +449,12 @@ export function DocumentLibrary() {
   const getFolderColor = (folder: string) => {
     const colors: Record<string, string> = {
       '全部': '#6B7280',
-      '未分类': '#6B7280',
-      '研究报告': '#DC2626',
-      '公文': '#059669',
-      '参考资料': '#0891B2',
-      '其他': '#64748B',
+      '金融经济': '#059669',
+      '国际贸易': '#2563EB',
+      '国际关系': '#DC2626',
+      '法律政策': '#7C3AED',
+      '统计资料': '#0891B2',
+      '其他': '#6B7280',
     };
     return colors[folder] || '#6B7280';
   };
@@ -413,6 +554,53 @@ export function DocumentLibrary() {
         </div>
       )}
 
+      {/* 快捷链接 */}
+      <div className="bg-card border border-border rounded-xl p-6 mb-6">
+        <h3 className="text-lg font-medium text-foreground mb-4">国际经济组织</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <a
+            href="https://www.un.org/zh/aboutun/structure/uneca/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col items-center gap-2 p-4 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors text-center"
+          >
+            <span className="text-2xl">🇺🇳</span>
+            <span className="text-sm font-medium text-blue-700">联合国非洲经济委员会</span>
+            <span className="text-xs text-blue-600">UNECA</span>
+          </a>
+          <a
+            href="https://afdb-org.cn"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col items-center gap-2 p-4 rounded-lg bg-green-50 hover:bg-green-100 transition-colors text-center"
+          >
+            <span className="text-2xl">🏛️</span>
+            <span className="text-sm font-medium text-green-700">非洲开发银行</span>
+            <span className="text-xs text-green-600">AFDB</span>
+          </a>
+          <a
+            href="https://www.shihang.org/ext/zh/home"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col items-center gap-2 p-4 rounded-lg bg-red-50 hover:bg-red-100 transition-colors text-center"
+          >
+            <span className="text-2xl">🏦</span>
+            <span className="text-sm font-medium text-red-700">世界银行</span>
+            <span className="text-xs text-red-600">World Bank</span>
+          </a>
+          <a
+            href="https://www.imf.org/zh/home"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col items-center gap-2 p-4 rounded-lg bg-purple-50 hover:bg-purple-100 transition-colors text-center"
+          >
+            <span className="text-2xl">💰</span>
+            <span className="text-sm font-medium text-purple-700">国际货币基金组织</span>
+            <span className="text-xs text-purple-600">IMF</span>
+          </a>
+        </div>
+      </div>
+
       {/* 操作栏 */}
       <div className="flex items-center gap-4 mb-6">
         {/* 搜索框 */}
@@ -447,19 +635,6 @@ export function DocumentLibrary() {
 
       {/* 文件夹筛选 */}
       <div className="flex gap-2 mb-6 overflow-x-auto pb-2 border-b border-border">
-        <button
-          onClick={() => setSelectedFolder('全部')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-colors whitespace-nowrap ${
-            selectedFolder === '全部'
-              ? 'border-primary bg-primary/5 text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <Folder className="w-5 h-5" />
-          <span className="font-medium">全部</span>
-          <span className="text-sm text-muted-foreground">({documents.length})</span>
-        </button>
-
         {folders.map(folder => (
           <button
             key={folder.id}
@@ -476,6 +651,50 @@ export function DocumentLibrary() {
           </button>
         ))}
       </div>
+
+      {/* 来源网站筛选按钮 */}
+      <div className="flex items-center gap-2 mb-4">
+        <button
+          onClick={() => setShowWebsiteModal(true)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-colors ${
+            selectedWebsite
+              ? 'border-blue-500 bg-blue-500/10 text-blue-600'
+              : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
+          }`}
+        >
+          <Globe className="w-5 h-5" />
+          <span className="font-medium">
+            {selectedWebsite
+              ? websites.find(w => w.id === selectedWebsite)?.name || '已选择来源'
+              : '筛选来源网站'}
+          </span>
+          {selectedWebsite && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedWebsite('');
+              }}
+              className="ml-1 p-0.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </button>
+        {selectedWebsite && (
+          <span className="text-sm text-muted-foreground">
+            已筛选: {websites.find(w => w.id === selectedWebsite)?.count || 0} 个文档
+          </span>
+        )}
+      </div>
+
+      {/* 网站选择模态框 */}
+      <WebsiteSelectionModal
+        isOpen={showWebsiteModal}
+        websites={websites}
+        selectedWebsite={selectedWebsite}
+        onSelect={setSelectedWebsite}
+        onClose={() => setShowWebsiteModal(false)}
+      />
 
       {/* 批量操作栏 */}
       {selectedDocs.size > 0 && (
@@ -550,19 +769,33 @@ export function DocumentLibrary() {
                           {doc.title}
                         </h3>
                         <div className="flex items-center gap-2">
-                          {getSourceBadge(doc.source_type)}
+                          {(() => {
+                            const badge = getSourceBadge(doc.source_type);
+                            return <span className={`text-xs px-2 py-0.5 rounded ${badge.color}`}>{badge.label}</span>;
+                          })()}
+                          {doc.source_url && (
+                            <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                              {extractWebsiteName(doc.source_url)}
+                            </span>
+                          )}
                           <span className="text-sm text-muted-foreground">{doc.filename}</span>
                         </div>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {formatFileSize(doc.file_size)} · {doc.file_type.toUpperCase()}
+                        {formatFileSize(doc.file_size)} · {(doc.file_type || 'unknown').toUpperCase()}
                       </p>
                       {doc.source_url && (
                         <div className="flex items-center gap-1 mt-1">
-                          <ExternalLink className="w-4 h-4 text-blue-500" />
-                          <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                          <ExternalLink className="w-3 h-3 text-blue-500" />
+                          <a
+                            href={doc.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-500 hover:underline truncate max-w-[250px]"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             {doc.source_url}
-                          </span>
+                          </a>
                         </div>
                       )}
                     </div>
@@ -614,15 +847,17 @@ export function DocumentLibrary() {
 
               {doc.tags && doc.tags.length > 0 && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-border ml-8">
-                  {doc.tags.map((tag, index) => (
+                  {doc.tags.map((tag, index) => {
+                    const tagStr = typeof tag === 'object' ? JSON.stringify(tag) : String(tag);
+                    return (
                     <span
                       key={index}
                       className="inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary text-sm"
                     >
                       <Tag className="w-3 h-3" />
-                      <span>{tag}</span>
+                      <span>{tagStr}</span>
                     </span>
-                  ))}
+                  )})}
                 </div>
               )}
             </div>
@@ -643,6 +878,28 @@ export function DocumentLibrary() {
         folders={availableFolders.map(f => f.name)}
         onProcessWithFunction={handleProcessWithFunction}
       />
+
+      {/* 文档预览对话框 */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-5xl h-[85vh]">
+          <DialogHeader>
+            <DialogTitle>{previewDoc?.title || '文档预览'}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            {previewLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-muted-foreground">加载中...</div>
+              </div>
+            ) : previewUrl ? (
+              <PDFPreview url={previewUrl} />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-muted-foreground">无法预览此文档</div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* 文件夹管理对话框 */}
       <FolderManagerDialog

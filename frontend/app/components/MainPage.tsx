@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FileText, Globe, ImageIcon, LogOut, MessageCircle, Clock, Folder } from 'lucide-react';
 import { AcademicToPaper } from '@/components/AcademicToPaper';
 import { CountryReport } from '@/components/CountryReport';
@@ -9,13 +9,34 @@ import { DocumentLibrary } from '@/components/DocumentLibrary';
 
 interface MainPageProps {
   onLogout: () => void;
+  initialDocId?: string;
+  initialMode?: string;
 }
 
 type TabType = 'academic' | 'country' | 'image' | 'history' | 'library';
 
-export function MainPage({ onLogout }: MainPageProps) {
+export function MainPage({ onLogout, initialDocId, initialMode }: MainPageProps) {
   const [activeTab, setActiveTab] = useState<TabType>('academic');
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [preselectedFileId, setPreselectedFileId] = useState<string | null>(null);
+  const [preselectedOperation, setPreselectedOperation] = useState<'translate' | 'rewrite' | null>(null);
+
+  // 如果有初始文档ID和模式，自动切换到对应标签页并预选文件
+  useEffect(() => {
+    if (initialMode === 'academic') {
+      setActiveTab('academic');
+      if (initialDocId) {
+        setPreselectedFileId(initialDocId);
+      }
+    } else if (initialMode === 'translate') {
+      // 翻译功能跳转到学术报告页面，并自动选择翻译操作
+      setActiveTab('academic');
+      if (initialDocId) {
+        setPreselectedFileId(initialDocId);
+        setPreselectedOperation('translate');
+      }
+    }
+  }, [initialMode, initialDocId]);
 
   const tabs = [
     { id: 'academic' as TabType, label: '学术报告转公文', icon: FileText },
@@ -83,7 +104,7 @@ export function MainPage({ onLogout }: MainPageProps) {
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
         <div className="max-w-7xl mx-auto px-6 py-8">
-          {activeTab === 'academic' && <AcademicToPaper />}
+          {activeTab === 'academic' && <AcademicToPaper preselectedFileId={preselectedFileId} preselectedOperation={preselectedOperation} onFileProcessed={() => { setPreselectedFileId(null); setPreselectedOperation(null); }} />}
           {activeTab === 'country' && <CountryReport />}
           {activeTab === 'image' && <ImageTranslation />}
           {activeTab === 'library' && <DocumentLibrary />}

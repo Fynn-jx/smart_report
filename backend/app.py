@@ -3,6 +3,7 @@ import sys
 import requests
 import json
 import time
+import uuid
 from flask import Flask, request, jsonify, Response, stream_with_context, send_file
 from flask_cors import CORS
 from typing import Optional, Generator
@@ -12,6 +13,10 @@ from openai import OpenAI
 import io
 import base64
 import re
+from dotenv import load_dotenv
+
+# 加载环境变量
+load_dotenv()
 
 # ============= Windows 编码修复 =============
 if sys.platform == 'win32':
@@ -89,6 +94,16 @@ CORS(app, resources={
         "origins": [
             "http://localhost:5173",
             "http://localhost:5174",
+            "http://localhost:5181",
+            "http://localhost:5182",
+            "http://localhost:5183",
+            "http://localhost:5184",
+            "http://localhost:5185",
+            "http://localhost:5186",
+            "http://localhost:5187",
+            "http://localhost:5188",
+            "http://localhost:5190",
+            "http://localhost:5200",
             "http://localhost:3000",
             "https://banksmart-report.vercel.app",
             "https://smart-report-jade.vercel.app",
@@ -103,6 +118,147 @@ CORS(app, resources={
 # 注册文档管理路由
 from document_local_api import register_document_routes
 register_document_routes(app)
+
+# ============= 本地历史记录存储 =============
+HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'conversion_history.json')
+
+def load_history() -> list:
+    """加载历史记录"""
+    print(f"历史记录文件路径: {HISTORY_FILE}")
+    if not os.path.exists(HISTORY_FILE):
+        print("历史记录文件不存在，将创建新文件")
+        return []
+    try:
+        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            print(f"加载历史记录: {len(data)} 条")
+            return data
+    except Exception as e:
+        print(f"加载历史记录失败: {e}")
+        return []
+
+def save_history(history: list):
+    """保存历史记录"""
+    try:
+        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+        print(f"保存历史记录成功: {len(history)} 条")
+    except Exception as e:
+        print(f"保存历史记录失败: {e}")
+
+def add_conversion_record(record: dict):
+    """添加转换记录"""
+    history = load_history()
+    history.insert(0, record)  # 添加到最前面
+    # 最多保存 100 条记录
+    history = history[:100]
+    save_history(history)
+
+def get_conversion_records(user_id: str = 'default', task_type: str = None, limit: int = 50) -> list:
+    """获取用户的转换记录"""
+    history = load_history()
+    print(f"历史记录总数: {len(history)}")
+
+    # 过滤用户 - 如果是 default，返回所有记录
+    if user_id == 'default':
+        records = history
+    else:
+        records = [r for r in history if r.get('user_id') == user_id]
+
+    print(f"用户 {user_id} 的记录数: {len(records)}")
+
+    # 过滤任务类型
+    if task_type and task_type != 'all':
+        records = [r for r in records if r.get('task_type') == task_type]
+
+    # 限制数量
+    return records[:limit]
+
+def update_conversion_record(record_id: str, status: str, output_url: str = None, error_message: str = None, output_content: str = None):
+    """更新转换记录"""
+    history = load_history()
+    for record in history:
+        if record.get('id') == record_id:
+            record['status'] = status
+            if output_url:
+                record['output_url'] = output_url
+            if output_content:
+                record['output_content'] = output_content
+            if error_message:
+                record['error_message'] = error_message
+            if status == 'completed':
+                record['completed_at'] = datetime.now().isoformat()
+            break
+    save_history(history)
+
+# 历史记录 API
+@app.route('/api/conversions', methods=['GET'])
+def get_conversions():
+    """获取转换历史记录"""
+    try:
+        user_id = request.args.get('user_id', 'default')
+        task_type = request.args.get('task_type')
+        limit = int(request.args.get('limit', 50))
+
+        print(f"获取历史记录: user_id={user_id}, task_type={task_type}, limit={limit}")
+        records = get_conversion_records(user_id, task_type, limit)
+        print(f"返回记录数: {len(records)}")
+
+        return jsonify({
+            "success": True,
+            "count": len(records),
+            "records": records
+        }), 200
+    except Exception as e:
+        print(f"获取历史记录失败: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/conversions/<record_id>', methods=['GET'])
+def get_conversion_record(record_id):
+    """获取单个转换记录"""
+    try:
+        history = load_history()
+        for record in history:
+            if record.get('id') == record_id:
+                return jsonify({
+                    "success": True,
+                    "record": record
+                }), 200
+        return jsonify({"error": "记录不存在"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/conversions/<record_id>', methods=['DELETE'])
+def delete_conversion_record(record_id):
+    """删除单个转换记录"""
+    try:
+        history = load_history()
+        new_history = [r for r in history if r.get('id') != record_id]
+
+        if len(new_history) == len(history):
+            return jsonify({"error": "记录不存在"}), 404
+
+        save_history(new_history)
+        return jsonify({
+            "success": True,
+            "message": "记录已删除"
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/conversions', methods=['DELETE'])
+def clear_all_conversions():
+    """清空所有转换记录"""
+    try:
+        save_history([])
+        return jsonify({
+            "success": True,
+            "message": "所有记录已清空"
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 class DifyAPIClient:
@@ -486,6 +642,25 @@ def convert_to_official():
 
         write_log(f"\n{'='*60}")
         write_log(f"转公文请求: file_id={file_id}, format={output_format}, style={style}")
+        write_log(f"完整请求数据: {json.dumps(data, ensure_ascii=False)}")
+
+        # 创建历史记录
+        import uuid
+        record_id = str(uuid.uuid4())
+        record = {
+            "id": record_id,
+            "user_id": user,
+            "task_type": "academic_convert",
+            "input_file_id": file_id,
+            "input_file_name": data.get('filename', '未知文件'),
+            "status": "processing",
+            "created_at": datetime.now().isoformat(),
+            "extra_params": {
+                "style": style,
+                "output_format": output_format
+            }
+        }
+        add_conversion_record(record)
 
         workflow_inputs = {
             "wenjian": {
@@ -498,6 +673,8 @@ def convert_to_official():
 
         # 获取参考文件（选填）
         reference_files = data.get('reference_files', [])
+        # 即使没有参考文件，也添加 conference_file 字段，设置为 null
+        # 这样 Dify 工作流可以判断是否为空的参考文件
         if reference_files:
             ref_file_id = reference_files[0]  # 只取第一个参考文件
             workflow_inputs["conference_file"] = {
@@ -506,6 +683,11 @@ def convert_to_official():
                 "upload_file_id": ref_file_id
             }
             write_log(f"已添加参考文件 conference_file 到工作流输入")
+        else:
+            # 不发送 conference_file 字段，让 Dify 工作流处理缺失的参数
+            write_log("未提供参考文件，将不发送 conference_file 参数")
+
+        write_log(f"工作流输入: {json.dumps(workflow_inputs, ensure_ascii=False)}")
 
         client = init_dify_client()
         
@@ -551,23 +733,32 @@ def convert_to_official():
                     all_data.append(data)
                     last_data_time = time.time()
                     write_log(f"收到数据: {json.dumps(data, ensure_ascii=False)}")
-                    
+
                     if 'status' in data:
                         workflow_status = data['status']
                         write_log(f"工作流状态: {workflow_status}")
-                    
+
                     if 'event' in data and data['event'] == 'node_finished':
-                        if 'data' in data and 'outputs' in data['data']:
-                            current_outputs = data['data']['outputs']
-                            if isinstance(current_outputs, dict):
-                                for key, value in current_outputs.items():
-                                    outputs.append(value)
-                                write_log(f"收到输出(字典): {len(current_outputs)} 个, 总输出数: {len(outputs)} 个, 键: {list(current_outputs.keys())}")
-                            else:
-                                for output in current_outputs:
-                                    outputs.append(output)
-                                write_log(f"收到输出(列表): {len(current_outputs)} 个, 总输出数: {len(outputs)} 个, 内容: {json.dumps(current_outputs, ensure_ascii=False)}")
-                    
+                        # 检查节点是否失败
+                        node_status = data.get('data', {}).get('status', 'unknown')
+                        node_id = data.get('data', {}).get('node_id', 'unknown')
+                        write_log(f"节点完成: node_id={node_id}, status={node_status}")
+
+                        # 检查是否有错误信息
+                        if 'data' in data:
+                            if 'error' in data['data']:
+                                write_log(f"节点错误: {data['data']['error']}")
+                            if 'outputs' in data['data']:
+                                current_outputs = data['data']['outputs']
+                                if isinstance(current_outputs, dict):
+                                    for key, value in current_outputs.items():
+                                        outputs.append(value)
+                                    write_log(f"收到输出(字典): {len(current_outputs)} 个, 总输出数: {len(outputs)} 个, 键: {list(current_outputs.keys())}")
+                                else:
+                                    for output in current_outputs:
+                                        outputs.append(output)
+                                    write_log(f"收到输出(列表): {len(current_outputs)} 个, 总输出数: {len(outputs)} 个, 内容: {json.dumps(current_outputs, ensure_ascii=False)}")
+
                     if 'event' in data and data['event'] == 'workflow_finished':
                         if 'data' in data and 'outputs' in data['data']:
                             workflow_outputs = data['data']['outputs']
@@ -636,12 +827,45 @@ def convert_to_official():
         write_log(f"是否收到DONE: {done_received}")
         
         success_statuses = ['succeeded', 'success', 'completed', 'finished', 'running']
+        failed_statuses = ['failed']
         write_log(f"检查状态: {workflow_status} 是否在成功列表中: {workflow_status in success_statuses}")
 
-        if ((workflow_status in success_statuses) or (workflow_status is None)) and len(outputs) > 0:
+        # 即使状态是 failed，只要有多于0的输出数据，也尝试提取
+        if ((workflow_status in success_statuses) or (workflow_status is None) or (workflow_status in failed_statuses)) and len(outputs) > 0:
             output = outputs[-1]
             write_log(f"输出类型: {type(output)}")
-            write_log(f"输出内容: {output}")
+            write_log(f"输出内容: {json.dumps(output, ensure_ascii=False)[:500]}")
+
+            # 预处理：如果输出是列表，提取第一个元素
+            if isinstance(output, list) and len(output) > 0:
+                write_log(f"输出是列表，提取第一个元素")
+                output = output[0]
+                write_log(f"提取后的类型: {type(output)}, 内容: {json.dumps(output, ensure_ascii=False)[:500]}")
+
+            # 特殊处理：当状态是 failed 时，尝试直接提取 remote_url
+            if workflow_status == 'failed':
+                write_log(f"Failed状态输出类型: {type(output)}, 内容: {json.dumps(output, ensure_ascii=False)[:500]}")
+
+                # 处理字典类型
+                if isinstance(output, dict):
+                    if output.get('remote_url'):
+                        write_log(f"从failed状态直接提取remote_url: {output.get('remote_url')}")
+                        return jsonify({
+                            "success": True,
+                            "output_url": output.get('remote_url'),
+                            "filename": output.get('filename', f"converted_document.{output_format}")
+                        })
+                # 处理列表类型（当输出是数组时）
+                elif isinstance(output, list) and len(output) > 0:
+                    first_item = output[0]
+                    write_log(f"Failed状态输出是列表，第一个元素: {json.dumps(first_item, ensure_ascii=False)[:200]}")
+                    if isinstance(first_item, dict) and first_item.get('remote_url'):
+                        write_log(f"从failed状态列表提取remote_url: {first_item.get('remote_url')}")
+                        return jsonify({
+                            "success": True,
+                            "output_url": first_item.get('remote_url'),
+                            "filename": first_item.get('filename', f"converted_document.{output_format}")
+                        })
 
             output_url = ''
             if isinstance(output, str):
@@ -654,15 +878,29 @@ def convert_to_official():
 
                 if output.get('type') == 'document':
                     output_url = output.get('data', '')
+                    # 如果有 remote_url，也要提取
+                    if not output_url and output.get('remote_url'):
+                        output_url = output.get('remote_url')
                     write_log(f"文档类型输出，URL: {output_url}")
                 elif output.get('type') == 'text':
                     output_url = output.get('data', '')
                     write_log(f"文本类型输出，内容: {output_url}")
                 elif 'data' in output:
                     output_url = output.get('data', '')
+                    # 如果有 remote_url，也要提取
+                    if not output_url and output.get('remote_url'):
+                        output_url = output.get('remote_url')
                     write_log(f"通用数据输出，内容: {output_url}")
+                elif 'remote_url' in output:
+                    # 直接从 remote_url 提取
+                    output_url = output.get('remote_url')
+                    write_log(f"从 remote_url 提取输出，URL: {output_url}")
+                elif 'filename' in output:
+                    # 文件类输出，提取 remote_url
+                    output_url = output.get('remote_url', '')
+                    write_log(f"从 filename 提取 remote_url: {output_url}")
                 else:
-                    write_log(f"未知输出类型，输出对象: {output}")
+                    write_log(f"未知输出类型，输出对象: {json.dumps(output, ensure_ascii=False)[:200]}")
             elif isinstance(output, list):
                 write_log(f"检测到列表输出，尝试提取第一个元素")
                 if len(output) > 0:
@@ -673,13 +911,26 @@ def convert_to_official():
                     elif isinstance(first_item, dict):
                         if first_item.get('type') == 'document':
                             output_url = first_item.get('data', '')
+                            # 也检查 remote_url
+                            if not output_url and first_item.get('remote_url'):
+                                output_url = first_item.get('remote_url')
                             write_log(f"列表第一个元素是文档，URL: {output_url}")
                         elif first_item.get('type') == 'text':
                             output_url = first_item.get('data', '')
                             write_log(f"列表第一个元素是文本，内容: {output_url}")
                         elif 'data' in first_item:
                             output_url = first_item.get('data', '')
+                            # 也检查 remote_url
+                            if not output_url and first_item.get('remote_url'):
+                                output_url = first_item.get('remote_url')
                             write_log(f"列表第一个元素通用数据，内容: {output_url}")
+                        elif 'remote_url' in first_item:
+                            output_url = first_item.get('remote_url')
+                            write_log(f"列表第一个元素从 remote_url 提取: {output_url}")
+                        elif 'filename' in first_item:
+                            # 文件类输出，提取 remote_url
+                            output_url = first_item.get('remote_url', '')
+                            write_log(f"列表第一个元素是文件，URL: {output_url}")
                     else:
                         write_log(f"列表第一个元素类型未知: {type(first_item)}")
                 else:
@@ -689,13 +940,22 @@ def convert_to_official():
 
             if output_url:
                 write_log(f"✓ 返回成功，输出URL: {output_url}")
+                # 更新历史记录
+                update_conversion_record(record_id, 'completed', output_url)
                 return jsonify({
                     "success": True,
                     "output_url": output_url,
                     "filename": f"converted_document.{output_format}"
                 })
             else:
-                write_log(f"✗ 输出URL为空，输出数据: {output}")
+                # 详细调试信息
+                write_log(f"✗ 输出URL为空！")
+                write_log(f"  输出类型: {type(output)}")
+                write_log(f"  输出内容: {json.dumps(output, ensure_ascii=False)[:300]}")
+                write_log(f"  type字段: {output.get('type') if isinstance(output, dict) else 'N/A'}")
+                write_log(f"  data字段: {output.get('data') if isinstance(output, dict) else 'N/A'}")
+                write_log(f"  remote_url字段: {output.get('remote_url') if isinstance(output, dict) else 'N/A'}")
+                write_log(f"  filename字段: {output.get('filename') if isinstance(output, dict) else 'N/A'}")
         
         if len(outputs) == 0 and len(all_data) > 0:
             write_log("尝试从所有数据中查找输出...")
@@ -711,13 +971,25 @@ def convert_to_official():
                     elif isinstance(output, dict):
                         if output.get('type') == 'document':
                             output_url = output.get('data', '')
+                            # 也检查 remote_url
+                            if not output_url and output.get('remote_url'):
+                                output_url = output.get('remote_url')
                             write_log(f"文档类型输出，URL: {output_url}")
                         elif output.get('type') == 'text':
                             output_url = output.get('data', '')
                             write_log(f"文本类型输出，内容: {output_url}")
                         elif 'data' in output:
                             output_url = output.get('data', '')
+                            # 也检查 remote_url
+                            if not output_url and output.get('remote_url'):
+                                output_url = output.get('remote_url')
                             write_log(f"通用数据输出，内容: {output_url}")
+                        elif 'remote_url' in output:
+                            output_url = output.get('remote_url')
+                            write_log(f"从 remote_url 提取输出: {output_url}")
+                        elif 'filename' in output:
+                            output_url = output.get('remote_url', '')
+                            write_log(f"文件输出，URL: {output_url}")
                     elif isinstance(output, list):
                         write_log(f"检测到列表输出，尝试提取第一个元素")
                         if len(output) > 0:
@@ -728,13 +1000,23 @@ def convert_to_official():
                             elif isinstance(first_item, dict):
                                 if first_item.get('type') == 'document':
                                     output_url = first_item.get('data', '')
+                                    if not output_url and first_item.get('remote_url'):
+                                        output_url = first_item.get('remote_url')
                                     write_log(f"列表第一个元素是文档，URL: {output_url}")
                                 elif first_item.get('type') == 'text':
                                     output_url = first_item.get('data', '')
                                     write_log(f"列表第一个元素是文本，内容: {output_url}")
                                 elif 'data' in first_item:
                                     output_url = first_item.get('data', '')
+                                    if not output_url and first_item.get('remote_url'):
+                                        output_url = first_item.get('remote_url')
                                     write_log(f"列表第一个元素通用数据，内容: {output_url}")
+                                elif 'remote_url' in first_item:
+                                    output_url = first_item.get('remote_url')
+                                    write_log(f"列表第一个元素从 remote_url 提取: {output_url}")
+                                elif 'filename' in first_item:
+                                    output_url = first_item.get('remote_url', '')
+                                    write_log(f"列表第一个元素是文件，URL: {output_url}")
 
                     if output_url:
                         write_log(f"✓ 从历史数据中找到输出，返回成功，输出URL: {output_url}")
@@ -746,13 +1028,25 @@ def convert_to_official():
                     break
         
         write_log(f"✗ 返回错误：状态={workflow_status}, 输出数={len(outputs)}, 状态是否成功={workflow_status in success_statuses}")
-        return jsonify({"error": "Workflow failed or no output generated"}), 500
+
+        # 返回更详细的错误信息
+        error_msg = f"工作流执行失败: 状态={workflow_status}"
+        if outputs:
+            error_msg += f", 输出数据={json.dumps(outputs, ensure_ascii=False)[:500]}"
+
+        # 更新历史记录为失败
+        update_conversion_record(record_id, 'error', None, error_msg)
+        return jsonify({"error": error_msg}), 500
 
     except requests.exceptions.Timeout:
         write_log(f"转换超时")
+        # 更新历史记录为失败
+        update_conversion_record(record_id, 'error', None, "Conversion timeout")
         return jsonify({"error": "Conversion timeout"}), 500
     except Exception as e:
         write_log(f"转换异常: {e}")
+        # 更新历史记录为失败
+        update_conversion_record(record_id, 'error', None, str(e))
         return jsonify({"error": str(e)}), 500
 
 
@@ -802,6 +1096,20 @@ def translate_document():
 
         write_log(f"\n{'='*60}")
         write_log(f"文档翻译请求: file_id={file_id}")
+
+        # 创建历史记录
+        record_id = str(uuid.uuid4())
+        record = {
+            "id": record_id,
+            "user_id": user,
+            "task_type": "academic_translate",
+            "input_file_id": file_id,
+            "input_file_name": data.get('filename', '未知文件'),
+            "status": "processing",
+            "created_at": datetime.now().isoformat(),
+            "extra_params": {}
+        }
+        add_conversion_record(record)
 
         workflow_inputs = {
             "wenjian": {
@@ -886,12 +1194,45 @@ def translate_document():
         write_log(f"是否收到DONE: {done_received}")
         
         success_statuses = ['succeeded', 'success', 'completed', 'finished', 'running']
+        failed_statuses = ['failed']
         write_log(f"检查状态: {workflow_status} 是否在成功列表中: {workflow_status in success_statuses}")
 
-        if ((workflow_status in success_statuses) or (workflow_status is None)) and len(outputs) > 0:
+        # 即使状态是 failed，只要有多于0的输出数据，也尝试提取
+        if ((workflow_status in success_statuses) or (workflow_status is None) or (workflow_status in failed_statuses)) and len(outputs) > 0:
             output = outputs[-1]
             write_log(f"输出类型: {type(output)}")
-            write_log(f"输出内容: {output}")
+            write_log(f"输出内容: {json.dumps(output, ensure_ascii=False)[:500]}")
+
+            # 预处理：如果输出是列表，提取第一个元素
+            if isinstance(output, list) and len(output) > 0:
+                write_log(f"输出是列表，提取第一个元素")
+                output = output[0]
+                write_log(f"提取后的类型: {type(output)}, 内容: {json.dumps(output, ensure_ascii=False)[:500]}")
+
+            # 特殊处理：当状态是 failed 时，尝试直接提取 remote_url
+            if workflow_status == 'failed':
+                write_log(f"Failed状态输出类型: {type(output)}, 内容: {json.dumps(output, ensure_ascii=False)[:500]}")
+
+                # 处理字典类型
+                if isinstance(output, dict):
+                    if output.get('remote_url'):
+                        write_log(f"从failed状态直接提取remote_url: {output.get('remote_url')}")
+                        return jsonify({
+                            "success": True,
+                            "output_url": output.get('remote_url'),
+                            "filename": output.get('filename', f"converted_document.{output_format}")
+                        })
+                # 处理列表类型（当输出是数组时）
+                elif isinstance(output, list) and len(output) > 0:
+                    first_item = output[0]
+                    write_log(f"Failed状态输出是列表，第一个元素: {json.dumps(first_item, ensure_ascii=False)[:200]}")
+                    if isinstance(first_item, dict) and first_item.get('remote_url'):
+                        write_log(f"从failed状态列表提取remote_url: {first_item.get('remote_url')}")
+                        return jsonify({
+                            "success": True,
+                            "output_url": first_item.get('remote_url'),
+                            "filename": first_item.get('filename', f"converted_document.{output_format}")
+                        })
 
             translated_content = ''
             if isinstance(output, str):
@@ -900,13 +1241,25 @@ def translate_document():
             elif isinstance(output, dict):
                 if output.get('type') == 'document':
                     translated_content = output.get('data', '')
+                    # 也检查 remote_url
+                    if not translated_content and output.get('remote_url'):
+                        translated_content = output.get('remote_url')
                     write_log(f"文档类型输出，URL: {translated_content}")
                 elif output.get('type') == 'text':
                     translated_content = output.get('data', '')
                     write_log(f"文本类型输出，内容: {translated_content}")
                 elif 'data' in output:
                     translated_content = output.get('data', '')
+                    # 也检查 remote_url
+                    if not translated_content and output.get('remote_url'):
+                        translated_content = output.get('remote_url')
                     write_log(f"通用数据输出，内容: {translated_content}")
+                elif 'remote_url' in output:
+                    translated_content = output.get('remote_url')
+                    write_log(f"从 remote_url 提取输出: {translated_content}")
+                elif 'filename' in output:
+                    translated_content = output.get('remote_url', '')
+                    write_log(f"文件输出，URL: {translated_content}")
                 else:
                     write_log(f"未知输出类型，输出对象: {output}")
             elif isinstance(output, list):
@@ -935,6 +1288,8 @@ def translate_document():
 
             if translated_content:
                 write_log(f"✓ 返回成功，翻译内容长度: {len(translated_content)}")
+                # 更新历史记录（保存内容用于预览）
+                update_conversion_record(record_id, 'completed', None, None, translated_content)
                 return jsonify({
                     "success": True,
                     "translated_content": translated_content
@@ -956,13 +1311,23 @@ def translate_document():
                     elif isinstance(output, dict):
                         if output.get('type') == 'document':
                             translated_content = output.get('data', '')
+                            if not translated_content and output.get('remote_url'):
+                                translated_content = output.get('remote_url')
                             write_log(f"文档类型输出，URL: {translated_content}")
                         elif output.get('type') == 'text':
                             translated_content = output.get('data', '')
                             write_log(f"文本类型输出，内容: {translated_content}")
                         elif 'data' in output:
                             translated_content = output.get('data', '')
+                            if not translated_content and output.get('remote_url'):
+                                translated_content = output.get('remote_url')
                             write_log(f"通用数据输出，内容: {translated_content}")
+                        elif 'remote_url' in output:
+                            translated_content = output.get('remote_url')
+                            write_log(f"从 remote_url 提取: {translated_content}")
+                        elif 'filename' in output:
+                            translated_content = output.get('remote_url', '')
+                            write_log(f"文件输出，URL: {translated_content}")
                     elif isinstance(output, list):
                         write_log(f"检测到列表输出，尝试提取第一个元素")
                         if len(output) > 0:
@@ -973,6 +1338,8 @@ def translate_document():
                             elif isinstance(first_item, dict):
                                 if first_item.get('type') == 'document':
                                     translated_content = first_item.get('data', '')
+                                    if not translated_content and first_item.get('remote_url'):
+                                        translated_content = first_item.get('remote_url')
                                     write_log(f"列表第一个元素是文档，URL: {translated_content}")
                                 elif first_item.get('type') == 'text':
                                     translated_content = first_item.get('data', '')
@@ -983,20 +1350,24 @@ def translate_document():
 
                     if translated_content:
                         write_log(f"✓ 从历史数据中找到输出，返回成功，翻译内容长度: {len(translated_content)}")
+                        update_conversion_record(record_id, 'completed', None, None, translated_content)
                         return jsonify({
                             "success": True,
                             "translated_content": translated_content
                         })
                     break
-        
+
         write_log(f"✗ 返回错误：状态={workflow_status}, 输出数={len(outputs)}, 状态是否成功={workflow_status in success_statuses}")
+        update_conversion_record(record_id, 'error', None, "Translation failed or no output generated")
         return jsonify({"error": "Translation failed or no output generated"}), 500
 
     except requests.exceptions.Timeout:
         write_log(f"翻译超时")
+        update_conversion_record(record_id, 'error', None, "Translation timeout")
         return jsonify({"error": "Translation timeout"}), 500
     except Exception as e:
         write_log(f"翻译异常: {e}")
+        update_conversion_record(record_id, 'error', None, str(e))
         return jsonify({"error": str(e)}), 500
 
 
@@ -1012,6 +1383,23 @@ def generate_country_report():
 
         write_log(f"\n{'='*60}")
         write_log(f"国别报告请求: country={country}, type={report_type}")
+
+        # 创建历史记录
+        record_id = str(uuid.uuid4())
+        record = {
+            "id": record_id,
+            "user_id": user,
+            "task_type": "country_situation" if report_type == 'situation' else "country_quarterly",
+            "input_file_id": None,
+            "input_file_name": f"{country}国别研究报告",
+            "status": "processing",
+            "created_at": datetime.now().isoformat(),
+            "extra_params": {
+                "country": country,
+                "report_type": report_type
+            }
+        }
+        add_conversion_record(record)
 
         country_names = {
             'egypt': '埃及',
@@ -1194,12 +1582,45 @@ def generate_country_report():
         write_log(f"是否收到DONE: {done_received}")
 
         success_statuses = ['succeeded', 'success', 'completed', 'finished', 'running']
+        failed_statuses = ['failed']
         write_log(f"检查状态: {workflow_status} 是否在成功列表中: {workflow_status in success_statuses}")
 
-        if ((workflow_status in success_statuses) or (workflow_status is None)) and len(outputs) > 0:
+        # 即使状态是 failed，只要有多于0的输出数据，也尝试提取
+        if ((workflow_status in success_statuses) or (workflow_status is None) or (workflow_status in failed_statuses)) and len(outputs) > 0:
             output = outputs[-1]
             write_log(f"输出类型: {type(output)}")
-            write_log(f"输出内容: {output}")
+            write_log(f"输出内容: {json.dumps(output, ensure_ascii=False)[:500]}")
+
+            # 预处理：如果输出是列表，提取第一个元素
+            if isinstance(output, list) and len(output) > 0:
+                write_log(f"输出是列表，提取第一个元素")
+                output = output[0]
+                write_log(f"提取后的类型: {type(output)}, 内容: {json.dumps(output, ensure_ascii=False)[:500]}")
+
+            # 特殊处理：当状态是 failed 时，尝试直接提取 remote_url
+            if workflow_status == 'failed':
+                write_log(f"Failed状态输出类型: {type(output)}, 内容: {json.dumps(output, ensure_ascii=False)[:500]}")
+
+                # 处理字典类型
+                if isinstance(output, dict):
+                    if output.get('remote_url'):
+                        write_log(f"从failed状态直接提取remote_url: {output.get('remote_url')}")
+                        return jsonify({
+                            "success": True,
+                            "output_url": output.get('remote_url'),
+                            "filename": output.get('filename', f"converted_document.{output_format}")
+                        })
+                # 处理列表类型（当输出是数组时）
+                elif isinstance(output, list) and len(output) > 0:
+                    first_item = output[0]
+                    write_log(f"Failed状态输出是列表，第一个元素: {json.dumps(first_item, ensure_ascii=False)[:200]}")
+                    if isinstance(first_item, dict) and first_item.get('remote_url'):
+                        write_log(f"从failed状态列表提取remote_url: {first_item.get('remote_url')}")
+                        return jsonify({
+                            "success": True,
+                            "output_url": first_item.get('remote_url'),
+                            "filename": first_item.get('filename', f"converted_document.{output_format}")
+                        })
 
             report_content = ''
             if isinstance(output, str):
@@ -1224,6 +1645,8 @@ def generate_country_report():
 
             if report_content:
                 write_log(f"✓ 返回成功，报告内容长度: {len(report_content)}")
+                # 更新历史记录（保存内容用于预览）
+                update_conversion_record(record_id, 'completed', None, None, report_content)
                 return jsonify({
                     "success": True,
                     "report_content": report_content,
@@ -1273,6 +1696,7 @@ def generate_country_report():
 
                     if report_content:
                         write_log(f"✓ 从历史数据中找到输出，返回成功，报告内容长度: {len(report_content)}")
+                        update_conversion_record(record_id, 'completed', None, None, report_content)
                         return jsonify({
                             "success": True,
                             "report_content": report_content,
@@ -1281,13 +1705,16 @@ def generate_country_report():
                     break
 
         write_log(f"✗ 返回错误：状态={workflow_status}, 输出数={len(outputs)}, 状态是否成功={workflow_status in success_statuses}")
+        update_conversion_record(record_id, 'error', None, "Report generation failed or no output generated")
         return jsonify({"error": "Report generation failed or no output generated"}), 500
 
     except requests.exceptions.Timeout:
         write_log(f"生成报告超时")
+        update_conversion_record(record_id, 'error', None, "Report generation timeout")
         return jsonify({"error": "Report generation timeout"}), 500
     except Exception as e:
         write_log(f"生成报告异常: {e}")
+        update_conversion_record(record_id, 'error', None, str(e))
         return jsonify({"error": str(e)}), 500
 
 
@@ -1302,6 +1729,23 @@ def generate_quarterly_report():
 
         write_log(f"\n{'='*60}")
         write_log(f"季度报告请求: country={country}")
+
+        # 创建历史记录
+        record_id = str(uuid.uuid4())
+        record = {
+            "id": record_id,
+            "user_id": user,
+            "task_type": "country_quarterly",
+            "input_file_id": None,
+            "input_file_name": f"{country}季度报告",
+            "status": "processing",
+            "created_at": datetime.now().isoformat(),
+            "extra_params": {
+                "country": country,
+                "report_type": "quarterly"
+            }
+        }
+        add_conversion_record(record)
 
         country_names = {
             'egypt': '埃及',
@@ -1437,12 +1881,45 @@ def generate_quarterly_report():
         write_log(f"是否收到DONE: {done_received}")
 
         success_statuses = ['succeeded', 'success', 'completed', 'finished', 'running']
+        failed_statuses = ['failed']
         write_log(f"检查状态: {workflow_status} 是否在成功列表中: {workflow_status in success_statuses}")
 
-        if ((workflow_status in success_statuses) or (workflow_status is None)) and len(outputs) > 0:
+        # 即使状态是 failed，只要有多于0的输出数据，也尝试提取
+        if ((workflow_status in success_statuses) or (workflow_status is None) or (workflow_status in failed_statuses)) and len(outputs) > 0:
             output = outputs[-1]
             write_log(f"输出类型: {type(output)}")
-            write_log(f"输出内容: {output}")
+            write_log(f"输出内容: {json.dumps(output, ensure_ascii=False)[:500]}")
+
+            # 预处理：如果输出是列表，提取第一个元素
+            if isinstance(output, list) and len(output) > 0:
+                write_log(f"输出是列表，提取第一个元素")
+                output = output[0]
+                write_log(f"提取后的类型: {type(output)}, 内容: {json.dumps(output, ensure_ascii=False)[:500]}")
+
+            # 特殊处理：当状态是 failed 时，尝试直接提取 remote_url
+            if workflow_status == 'failed':
+                write_log(f"Failed状态输出类型: {type(output)}, 内容: {json.dumps(output, ensure_ascii=False)[:500]}")
+
+                # 处理字典类型
+                if isinstance(output, dict):
+                    if output.get('remote_url'):
+                        write_log(f"从failed状态直接提取remote_url: {output.get('remote_url')}")
+                        return jsonify({
+                            "success": True,
+                            "output_url": output.get('remote_url'),
+                            "filename": output.get('filename', f"converted_document.{output_format}")
+                        })
+                # 处理列表类型（当输出是数组时）
+                elif isinstance(output, list) and len(output) > 0:
+                    first_item = output[0]
+                    write_log(f"Failed状态输出是列表，第一个元素: {json.dumps(first_item, ensure_ascii=False)[:200]}")
+                    if isinstance(first_item, dict) and first_item.get('remote_url'):
+                        write_log(f"从failed状态列表提取remote_url: {first_item.get('remote_url')}")
+                        return jsonify({
+                            "success": True,
+                            "output_url": first_item.get('remote_url'),
+                            "filename": first_item.get('filename', f"converted_document.{output_format}")
+                        })
 
             report_content = ''
             if isinstance(output, str):
@@ -1486,6 +1963,8 @@ def generate_quarterly_report():
 
             if report_content:
                 write_log(f"✓ 返回成功，报告内容长度: {len(report_content)}")
+                # 更新历史记录（保存内容用于预览）
+                update_conversion_record(record_id, 'completed', None, None, report_content)
                 return jsonify({
                     "success": True,
                     "report_content": report_content,
@@ -1535,6 +2014,7 @@ def generate_quarterly_report():
 
                     if report_content:
                         write_log(f"✓ 从历史数据中找到输出，返回成功，报告内容长度: {len(report_content)}")
+                        update_conversion_record(record_id, 'completed', None, None, report_content)
                         return jsonify({
                             "success": True,
                             "report_content": report_content,
@@ -1543,13 +2023,16 @@ def generate_quarterly_report():
                     break
 
         write_log(f"✗ 返回错误：状态={workflow_status}, 输出数={len(outputs)}, 状态是否成功={workflow_status in success_statuses}")
+        update_conversion_record(record_id, 'error', None, "Report generation failed or no output generated")
         return jsonify({"error": "Report generation failed or no output generated"}), 500
 
     except requests.exceptions.Timeout:
         write_log(f"生成报告超时")
+        update_conversion_record(record_id, 'error', None, "Report generation timeout")
         return jsonify({"error": "Report generation timeout"}), 500
     except Exception as e:
         write_log(f"生成报告异常: {e}")
+        update_conversion_record(record_id, 'error', None, str(e))
         return jsonify({"error": str(e)}), 500
 
 
@@ -1571,12 +2054,30 @@ def translate_image():
 
         print(f"\nProcessing: {file.filename}")
 
+        # 创建历史记录
+        record_id = str(uuid.uuid4())
+        user = request.form.get('user', 'default')
+        record = {
+            "id": record_id,
+            "user_id": user,
+            "task_type": "image_translate",
+            "input_file_id": None,
+            "input_file_name": file.filename,
+            "status": "processing",
+            "created_at": datetime.now().isoformat(),
+            "extra_params": {}
+        }
+        add_conversion_record(record)
+
         image_b64, original_size = load_and_preprocess_image(file)
 
         client = init_openai_client()
         completion = client.translate_image(image_b64)
 
         image_bytes, ext = client.get_image_from_response(completion)
+
+        # 更新历史记录为完成
+        update_conversion_record(record_id, 'completed', None, None)
 
         output_filename = f"translated_{file.filename.rsplit('.', 1)[0]}{ext}"
         return send_file(
@@ -1588,6 +2089,7 @@ def translate_image():
 
     except Exception as e:
         print(f"Error: {e}")
+        update_conversion_record(record_id, 'error', None, str(e))
         return jsonify({"error": str(e)}), 500
 
 

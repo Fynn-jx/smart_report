@@ -1,18 +1,136 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Upload, FileText, Loader2, Download, CheckCircle2, X, Languages, FileEdit } from 'lucide-react';
 import { StyleSelectionModal } from '@/components/Selection';
 import { ReferenceFileUpload } from '@/components/ReferenceFileUpload';
 import { getApiConfig } from '@/config/api';
 
 type OperationType = 'translate' | 'rewrite';
+
+interface AcademicToPaperProps {
+  preselectedFileId?: string | null;
+  preselectedOperation?: 'translate' | 'rewrite' | null;
+  onFileProcessed?: () => void;
+}
+
 type ProcessingState = {
   id: string;
   type: OperationType;
   status: 'processing' | 'completed' | 'error';
   result?: string;
+  isUrl?: boolean; // 是否是文件URL
 };
 
-export function AcademicToPaper() {
+// 判断是否为URL
+const isUrl = (text: string): boolean => {
+  try {
+    new URL(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// 将markdown格式转换为纯文本（去除星号等标记）
+const convertMarkdownToPlainText = (markdown: string): string => {
+  let text = markdown;
+
+  // 1. 移除加粗标记 **text** 或 __text__
+  text = text.replace(/\*\*([^*]+)\*\*/g, '$1');
+  text = text.replace(/__([^_]+)__/g, '$1');
+
+  // 2. 移除斜体标记 *text* 或 _text_
+  text = text.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '$1');
+  text = text.replace(/(?<!_)_([^_]+)_(?!_)/g, '$1');
+
+  // 3. 移除删除线 ~~text~~
+  text = text.replace(/~~([^~]+)~~/g, '$1');
+
+  // 4. 移除行内代码 `code`
+  text = text.replace(/`([^`]+)`/g, '$1');
+
+  // 5. 处理标题 # H1, ## H2, ### H3
+  text = text.replace(/^#{1,6}\s+/gm, '');
+
+  // 6. 处理列表 - item 或 * item
+  text = text.replace(/^[-*]\s+/gm, '• ');
+
+  // 7. 处理数字列表 1. item
+  text = text.replace(/^\d+\.\s+/gm, '');
+
+  // 8. 移除链接 [text](url) -> text
+  text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+
+  // 9. 移除图片 ![alt](url)
+  text = text.replace(/!\[[^\]]*\]\([^)]+\)/g, '');
+
+  // 10. 处理引用 > quote
+  text = text.replace(/^>\s+/gm, '');
+
+  // 11. 移除水平线 --- 或 *** 或 ___
+  text = text.replace(/^[-*_]{3,}$/gm, '');
+
+  // 12. 清理多余空格但保留段落
+  text = text.replace(/^\s+$/gm, '');
+
+  return text;
+};
+
+// 将内容转换为PDF并下载
+const downloadAsPdf = (content: string, filename: string) => {
+  // 先将markdown转换为纯文本
+  const plainText = convertMarkdownToPlainText(content);
+
+  // 将换行符转换为HTML换行
+  const htmlContent = plainText.replace(/\n/g, '<br>');
+
+  // 创建HTML内容用于打印
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    alert('无法打开打印窗口，请检查浏览器设置');
+    return;
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>${filename}</title>
+      <style>
+        body {
+          font-family: "Microsoft YaHei", "SimSun", sans-serif;
+          font-size: 12pt;
+          line-height: 1.8;
+          padding: 40px;
+          max-width: 800px;
+          margin: 0 auto;
+        }
+        h1 { font-size: 18pt; text-align: center; margin-bottom: 20px; }
+        h2 { font-size: 14pt; margin-top: 24px; margin-bottom: 12px; }
+        h3 { font-size: 13pt; margin-top: 18px; margin-bottom: 10px; }
+        p { margin: 10px 0; text-align: justify; }
+        ul, ol { margin: 10px 0; padding-left: 24px; }
+        li { margin: 5px 0; }
+        table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+        th, td { border: 1px solid #333; padding: 8px; text-align: left; }
+        blockquote { border-left: 3px solid #666; padding-left: 15px; margin-left: 0; color: #555; }
+        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+        pre { background: #f4f4f4; padding: 15px; overflow-x: auto; border-radius: 5px; }
+        @media print {
+          body { padding: 20px; }
+        }
+      </style>
+    </head>
+    <body>${htmlContent}</body>
+    </html>
+  `);
+  printWindow.document.close();
+  // 等待内容加载后触发打印
+  setTimeout(() => {
+    printWindow.print();
+  }, 250);
+};
+
+export function AcademicToPaper({ preselectedFileId, preselectedOperation, onFileProcessed }: AcademicToPaperProps) {
   const [file, setFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -22,8 +140,66 @@ export function AcademicToPaper() {
   const [selectedStyle, setSelectedStyle] = useState<string>('style1');
   const [referenceFileIds, setReferenceFileIds] = useState<string[]>([]);
   const [selectedOperation, setSelectedOperation] = useState<OperationType | null>(null);
+  const [preselectedLoading, setPreselectedLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const apiConfig = getApiConfig();
+
+  // 自动加载预选文件
+  useEffect(() => {
+    if (preselectedFileId && !fileId) {
+      loadPreselectedFile(preselectedFileId, preselectedOperation || undefined);
+    }
+  }, [preselectedFileId, preselectedOperation]);
+
+  // 加载预选文件
+  const loadPreselectedFile = async (docId: string, operation?: 'translate' | 'rewrite') => {
+    setPreselectedLoading(true);
+    try {
+      // 获取文档信息
+      const docResponse = await fetch(`${apiConfig.BASE_URL}/api/documents/${docId}`);
+      if (!docResponse.ok) {
+        throw new Error('获取文档信息失败');
+      }
+      const docData = await docResponse.json();
+
+      // 获取文档下载URL
+      const urlResponse = await fetch(`${apiConfig.BASE_URL}/api/documents/${docId}/url`);
+      if (!urlResponse.ok) {
+        throw new Error('获取文档URL失败');
+      }
+      const urlData = await urlResponse.json();
+
+      if (urlData.url) {
+        // 使用后端代理下载文件（解决跨域问题）
+        const fileResponse = await fetch(`${apiConfig.BASE_URL}/api/documents/${docId}/download`);
+        if (!fileResponse.ok) {
+          throw new Error('下载文档失败');
+        }
+        const blob = await fileResponse.blob();
+
+        // 创建 File 对象
+        const fileName = docData.title || docData.filename || 'document.pdf';
+        const fileType = blob.type || 'application/pdf';
+        const preselectedFile = new File([blob], fileName, { type: fileType });
+
+        setFile(preselectedFile);
+
+        // 如果指定了操作类型，自动选择并上传
+        if (operation) {
+          setSelectedOperation(operation);
+          // 延迟一点让 UI 更新，然后自动上传
+          setTimeout(() => {
+            handleUploadAndProcess(preselectedFile, operation);
+          }, 100);
+        }
+      }
+    } catch (err) {
+      console.error('加载预选文件失败:', err);
+      alert('加载文档失败，请手动上传');
+    } finally {
+      setPreselectedLoading(false);
+    }
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -139,6 +315,88 @@ export function AcademicToPaper() {
     }
   };
 
+  // 处理预选文件（自动上传并处理）
+  const handleUploadAndProcess = async (fileToProcess: File, type: OperationType) => {
+    const newState: ProcessingState = {
+      id: Date.now().toString(),
+      type,
+      status: 'processing',
+    };
+
+    setProcessingStates((prev) => [...prev, newState]);
+
+    try {
+      setIsUploading(true);
+      setUploadProgress(0);
+
+      // 上传文件
+      const formData = new FormData();
+      formData.append('file', fileToProcess);
+      formData.append('user', 'default');
+
+      const uploadResponse = await fetch(apiConfig.UPLOAD_URL, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        throw new Error(errorData.error || '上传失败');
+      }
+
+      const uploadResult = await uploadResponse.json();
+      const currentFileId = uploadResult.file_id;
+      setFileId(currentFileId);
+
+      setUploadProgress(100);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      setIsUploading(false);
+
+      // 调用处理 API
+      const apiUrl = type === 'translate' ? apiConfig.TRANSLATE_URL : apiConfig.CONVERT_URL;
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file_id: currentFileId,
+          user: 'default',
+          output_format: 'docx',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '处理失败');
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        const content = type === 'translate' ? result.translated_content : result.output_url;
+        setProcessingStates((prev) =>
+          prev.map((state) =>
+            state.id === newState.id ? { ...state, status: 'completed', result: content } : state
+          )
+        );
+      } else {
+        throw new Error(result.error || '处理失败');
+      }
+
+      // 通知完成
+      if (onFileProcessed) {
+        onFileProcessed();
+      }
+    } catch (error) {
+      setProcessingStates((prev) =>
+        prev.map((state) =>
+          state.id === newState.id ? { ...state, status: 'error' } : state
+        )
+      );
+      console.error('处理失败:', error);
+    }
+  };
+
   const handleStyleSelect = async (style: string) => {
     setSelectedStyle(style);
     setShowStyleModal(false);
@@ -226,13 +484,15 @@ export function AcademicToPaper() {
   };
 
   const handleDownload = (result: string, type: OperationType) => {
-    const blob = new Blob([result], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${type === 'translate' ? '原文翻译' : '公文写作'}结果.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    // 判断是否是URL（PDF文件链接）
+    if (isUrl(result)) {
+      // 直接下载PDF文件
+      window.open(result, '_blank');
+    } else {
+      // 将markdown/text内容转换为PDF下载
+      const filename = `${type === 'translate' ? '原文翻译' : '公文写作'}结果`;
+      downloadAsPdf(result, filename);
+    }
   };
 
   const handleRemoveResult = (id: string) => {
@@ -267,16 +527,6 @@ export function AcademicToPaper() {
     }
   };
 
-  // 检查是否为有效的URL
-  const isUrl = (text: string): boolean => {
-    try {
-      new URL(text);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-6">
@@ -285,6 +535,14 @@ export function AcademicToPaper() {
           上传学术报告或研究报告，可选择原文翻译或公文写作
         </p>
       </div>
+
+      {/* 预选文件加载提示 */}
+      {preselectedLoading && (
+        <div className="bg-primary/10 border border-primary/30 rounded-xl p-8 text-center mb-6">
+          <Loader2 className="w-8 h-8 mx-auto mb-3 text-primary animate-spin" />
+          <p className="text-primary">正在加载文档...</p>
+        </div>
+      )}
 
       {/* 上传区域 */}
       {!file && (

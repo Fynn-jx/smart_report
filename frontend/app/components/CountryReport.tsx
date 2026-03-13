@@ -7,6 +7,104 @@ import { getApiConfig } from '@/config/api';
 type ReportType = 'situation' | 'quarterly';
 type ProcessStatus = 'idle' | 'processing' | 'completed' | 'error';
 
+// 将markdown格式转换为纯文本（去除星号等标记）
+const convertMarkdownToPlainText = (markdown: string): string => {
+  let text = markdown;
+
+  // 1. 移除加粗标记 **text** 或 __text__
+  text = text.replace(/\*\*([^*]+)\*\*/g, '$1');
+  text = text.replace(/__([^_]+)__/g, '$1');
+
+  // 2. 移除斜体标记 *text* 或 _text_
+  text = text.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '$1');
+  text = text.replace(/(?<!_)_([^_]+)_(?!_)/g, '$1');
+
+  // 3. 移除删除线 ~~text~~
+  text = text.replace(/~~([^~]+)~~/g, '$1');
+
+  // 4. 移除行内代码 `code`
+  text = text.replace(/`([^`]+)`/g, '$1');
+
+  // 5. 处理标题 # H1, ## H2, ### H3
+  text = text.replace(/^#{1,6}\s+/gm, '');
+
+  // 6. 处理列表 - item 或 * item
+  text = text.replace(/^[-*]\s+/gm, '• ');
+
+  // 7. 处理数字列表 1. item
+  text = text.replace(/^\d+\.\s+/gm, '');
+
+  // 8. 移除链接 [text](url) -> text
+  text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+
+  // 9. 移除图片 ![alt](url)
+  text = text.replace(/!\[[^\]]*\]\([^)]+\)/g, '');
+
+  // 10. 处理引用 > quote
+  text = text.replace(/^>\s+/gm, '');
+
+  // 11. 移除水平线 --- 或 *** 或 ___
+  text = text.replace(/^[-*_]{3,}$/gm, '');
+
+  // 12. 清理多余空格但保留段落
+  text = text.replace(/^\s+$/gm, '');
+
+  return text;
+};
+
+// 将内容转换为PDF并下载
+const downloadAsPdf = (content: string, filename: string) => {
+  // 先将markdown转换为纯文本
+  const plainText = convertMarkdownToPlainText(content);
+
+  // 将换行符转换为HTML换行
+  const htmlContent = plainText.replace(/\n/g, '<br>');
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    alert('无法打开打印窗口，请检查浏览器设置');
+    return;
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>${filename}</title>
+      <style>
+        body {
+          font-family: "Microsoft YaHei", "SimSun", sans-serif;
+          font-size: 12pt;
+          line-height: 1.8;
+          padding: 40px;
+          max-width: 800px;
+          margin: 0 auto;
+        }
+        h1 { font-size: 18pt; text-align: center; margin-bottom: 20px; }
+        h2 { font-size: 14pt; margin-top: 24px; margin-bottom: 12px; }
+        h3 { font-size: 13pt; margin-top: 18px; margin-bottom: 10px; }
+        p { margin: 10px 0; text-align: justify; }
+        ul, ol { margin: 10px 0; padding-left: 24px; }
+        li { margin: 5px 0; }
+        table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+        th, td { border: 1px solid #333; padding: 8px; text-align: left; }
+        blockquote { border-left: 3px solid #666; padding-left: 15px; margin-left: 0; color: #555; }
+        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+        pre { background: #f4f4f4; padding: 15px; overflow-x: auto; border-radius: 5px; }
+        @media print {
+          body { padding: 20px; }
+        }
+      </style>
+    </head>
+    <body>${htmlContent}</body>
+    </html>
+  `);
+  printWindow.document.close();
+  setTimeout(() => {
+    printWindow.print();
+  }, 250);
+};
+
 // 国家名称映射
 const countryNames: Record<string, string> = {
   egypt: '埃及',
@@ -97,15 +195,10 @@ export function CountryReport() {
   };
 
   const handleDownload = () => {
-    const blob = new Blob([result], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${countryNames[country] || country}_${
+    const filename = `${countryNames[country] || country}_${
       reportType === 'situation' ? '国别情况报告' : '季度报告'
-    }.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    }`;
+    downloadAsPdf(result, filename);
   };
 
   const handleReset = () => {

@@ -332,8 +332,36 @@
       正在检测页面文档...
     </div>
 
+    <!-- 手动输入区域（始终可见） -->
+    <div class="manual-input" style="margin-bottom: 16px; background: #f0f9ff; border: 1px solid #0ea5e9;">
+        <div class="manual-input-title" style="font-size: 14px; font-weight: 500; color: #0369a1;">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="16">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          使用方法：点击页面紫色标记的PDF链接 → 复制地址栏URL → 粘贴到下方
+        </div>
+        <div class="form-group">
+          <input
+            type="text"
+            id="manualUrl"
+            placeholder="粘贴PDF链接..."
+            style="border-color: #0ea5e9;"
+          />
+        </div>
+        <div class="form-group">
+          <input
+            type="text"
+            id="manualTitle"
+            placeholder="文档标题（可选）"
+          />
+        </div>
+        <button id="useManualBtn" class="btn btn-primary" style="width: 100%;">
+          保存到文献库
+        </button>
+    </div>
+
     <!-- 检测结果列表 -->
-    <div id="resultsSection" class="hidden">
+    <div id="resultsSection" style="display: none;">
       <div class="toggle-button" id="toggleManual">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -380,6 +408,26 @@
           type="text"
           id="docTitle"
           placeholder="自动检测或手动输入"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="docFolder">保存到文件夹</label>
+        <select id="docFolder">
+          <option value="未分类">未分类</option>
+          <option value="研究报告">研究报告</option>
+          <option value="公文">公文</option>
+          <option value="参考资料">参考资料</option>
+          <option value="其他">其他</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="docTags">标签（用逗号分隔，可选）</label>
+        <input
+          type="text"
+          id="docTags"
+          placeholder="例如: 金融, 2024, 重要"
         />
       </div>
 

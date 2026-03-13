@@ -13,18 +13,31 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { FileText, Tag, Folder, ExternalLink, Trash2, BookOpen, Languages, FileEdit } from 'lucide-react';
 
+interface DocumentTag {
+  label: string;
+  color?: string;
+}
+
 interface Document {
   id: string;
   title: string;
   filename: string;
   source_url?: string;
   source_type: 'plugin' | 'manual' | 'upload';
-  tags: string[];
+  tags: (string | DocumentTag)[];
   notes?: string;
   folder: string;
   file_size: number;
   file_type: string;
   created_at: string;
+}
+
+// Helper function to get tag label string
+function getTagLabel(tag: string | DocumentTag): string {
+  if (typeof tag === 'object' && tag !== null && 'label' in tag) {
+    return tag.label;
+  }
+  return String(tag);
 }
 
 interface DocumentDetailDialogProps {
@@ -47,7 +60,7 @@ export function DocumentDetailDialog({
   onProcessWithFunction
 }: DocumentDetailDialogProps) {
   const [title, setTitle] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
+  const [tags, setTags] = useState<(string | DocumentTag)[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [notes, setNotes] = useState('');
   const [folder, setFolder] = useState('');
@@ -56,7 +69,11 @@ export function DocumentDetailDialog({
   useEffect(() => {
     if (document) {
       setTitle(document.title);
-      setTags(document.tags || []);
+      // Normalize tags to strings
+      const normalizedTags = (document.tags || []).map((tag: any) =>
+        typeof tag === 'object' && tag !== null ? String(tag.label || '') : String(tag)
+      );
+      setTags(normalizedTags);
       setNotes(document.notes || '');
       setFolder(document.folder);
     }
@@ -84,14 +101,17 @@ export function DocumentDetailDialog({
 
   const handleAddTag = () => {
     const tag = tagInput.trim();
-    if (tag && !tags.includes(tag)) {
-      setTags([...tags, tag]);
+    const tagLabel = getTagLabel(tag);
+    const exists = tags.some(t => (typeof t === 'object' ? t.label : t) === tagLabel);
+    if (tagLabel && !exists) {
+      setTags([...tags, { label: tagLabel }]);
       setTagInput('');
     }
   };
 
-  const handleRemoveTag = (tagToRemove: string) => {
-    setTags(tags.filter(t => t !== tagToRemove));
+  const handleRemoveTag = (tagToRemove: string | DocumentTag) => {
+    const removeLabel = getTagLabel(tagToRemove);
+    setTags(tags.filter(t => (typeof t === 'object' ? t.label : t) !== removeLabel));
   };
 
   const handleDelete = async () => {
@@ -198,10 +218,12 @@ export function DocumentDetailDialog({
                 </div>
                 {tags.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
-                    {tags.map((tag, index) => (
+                    {tags.map((tag, index) => {
+                      const tagStr = typeof tag === 'object' ? JSON.stringify(tag) : String(tag);
+                      return (
                       <Badge key={index} variant="secondary" className="flex items-center gap-1">
                         <Tag className="w-3 h-3" />
-                        {tag}
+                        {tagStr}
                         <button
                           onClick={() => handleRemoveTag(tag)}
                           className="ml-1 hover:text-destructive"
@@ -209,7 +231,7 @@ export function DocumentDetailDialog({
                           ×
                         </button>
                       </Badge>
-                    ))}
+                    )})}
                   </div>
                 )}
               </div>

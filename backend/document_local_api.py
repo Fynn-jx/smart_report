@@ -1,22 +1,64 @@
 """
 文档管理 API（本地存储模式）
 只存储文档索引，文件保存在用户本地
+
+使用直接的 HTTP 请求访问 Supabase REST API，绕过 DNS 解析问题
 """
 import os
 import json
 import uuid
+import requests
 from datetime import datetime
 from flask import request, jsonify
 from dotenv import load_dotenv
-from supabase import create_client, Client
 
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+STORAGE_BUCKET_NAME = "documents"  # 存储桶名称
 
-# 初始化 Supabase 客户端
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+print(f"[DEBUG] Supabase URL: {SUPABASE_URL}")
+print(f"[DEBUG] Supabase Key: {SUPABASE_KEY[:20]}...")
+
+# Supabase REST API 端点
+SUPABASE_REST_URL = f"{SUPABASE_URL}/rest/v1"
+
+# 设置请求头
+headers = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
+}
+
+def supabase_request(method, table, data=None, params=None):
+    """
+    直接发送 HTTP 请求到 Supabase REST API
+    """
+    url = f"{SUPABASE_REST_URL}/{table}"
+    try:
+        if method == "GET":
+            response = requests.get(url, headers=headers, params=params)
+        elif method == "POST":
+            response = requests.post(url, headers=headers, json=data)
+        elif method == "PATCH":
+            response = requests.patch(url, headers=headers, json=data, params=params)
+        elif method == "DELETE":
+            response = requests.delete(url, headers=headers, params=params)
+        else:
+            raise ValueError(f"Unsupported method: {method}")
+
+        response.raise_for_status()
+        return response
+    except requests.exceptions.RequestException as e:
+        print(f"[ERROR] Supabase request failed: {e}")
+        raise Exception(f"Supabase request failed: {e}")
+
+
+def get_storage_url(file_path):
+    """获取存储文件的公开URL"""
+    return f"{SUPABASE_URL}/storage/v1/object/public/{STORAGE_BUCKET_NAME}/{file_path}"
 
 
 def register_document_routes(app):
@@ -42,7 +84,7 @@ def register_document_routes(app):
             filename = data.get('filename', '')
             source_url = data.get('source_url', '')
             tags = data.get('tags', [])
-            folder = data.get('folder', '未分类')
+            folder = data.get('folder', '其他')
             source_type = data.get('source_type', 'manual')  # plugin/manual
 
             # 生成唯一ID
@@ -63,16 +105,16 @@ def register_document_routes(app):
                 "updated_at": datetime.now().isoformat()
             }
 
-            result = supabase.table("documents").insert(document_data).execute()
+            response = supabase_request("POST", "documents", document_data)
 
-            if result.data:
+            if response.status_code in [200, 201]:
                 return jsonify({
                     "success": True,
-                    "document": result.data[0],
+                    "document": response.json()[0] if response.json() else document_data,
                     "message": "Document index created"
                 }), 200
             else:
-                return jsonify({"error": "Failed to create index"}), 500
+                return jsonify({"error": f"Failed to create index: {response.text}"}), 500
 
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -86,21 +128,40 @@ def register_document_routes(app):
             folder = request.args.get('folder')
             tag = request.args.get('tag')
             search = request.args.get('search')
+            website = request.args.get('website')  # 按来源网站筛选
             limit = int(request.args.get('limit', 50))
 
-            query = supabase.table("documents").select("*").eq("user_id", user_id)
+            # 构建查询参数
+            params = {
+                "user_id": f"eq.{user_id}",
+                "order": "created_at.desc",
+                "limit": limit
+            }
 
             if folder:
-                query = query.eq("folder", folder)
+                params["folder"] = f"eq.{folder}"
 
-            # 应用筛选
-            result = query.order("created_at", desc=True).limit(limit).execute()
+            response = supabase_request("GET", "documents", params=params)
+            documents = response.json()
 
-            documents = result.data
+            # 规范化标签为纯字符串（Supabase可能返回对象格式）
+            for doc in documents:
+                if 'tags' in doc and doc['tags']:
+                    normalized_tags = []
+                    for tag in doc['tags']:
+                        if isinstance(tag, dict) and 'label' in tag:
+                            normalized_tags.append(tag['label'])
+                        else:
+                            normalized_tags.append(str(tag))
+                    doc['tags'] = normalized_tags
 
             # 客户端标签筛选
             if tag:
                 documents = [d for d in documents if tag in (d.get('tags') or [])]
+
+            # 按来源网站筛选
+            if website:
+                documents = [d for d in documents if d.get('source_url') and website.lower() in d.get('source_url', '').lower()]
 
             # 客户端搜索
             if search:
@@ -109,7 +170,7 @@ def register_document_routes(app):
                     d for d in documents
                     if search_lower in d.get('title', '').lower()
                     or search_lower in d.get('filename', '').lower()
-                    or search_lower in d.get('notes', '').lower()
+                    or (d.get('notes') and search_lower in d.get('notes', '').lower())
                 ]
 
             return jsonify({
@@ -126,15 +187,106 @@ def register_document_routes(app):
     def get_document(doc_id):
         """获取单个文档详情"""
         try:
-            result = supabase.table("documents").select("*").eq("id", doc_id).execute()
+            params = {"id": f"eq.{doc_id}", "limit": 1}
+            response = supabase_request("GET", "documents", params=params)
+            documents = response.json()
 
-            if result.data:
+            if documents:
                 return jsonify({
                     "success": True,
-                    "document": result.data[0]
+                    "document": documents[0]
                 }), 200
             else:
                 return jsonify({"error": "Document not found"}), 404
+
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+
+    @app.route('/api/documents/<doc_id>/url', methods=['GET'])
+    def get_document_url(doc_id):
+        """获取文档的预览URL"""
+        try:
+            params = {"id": f"eq.{doc_id}", "limit": 1}
+            response = supabase_request("GET", "documents", params=params)
+            documents = response.json()
+
+            if not documents:
+                return jsonify({"error": "Document not found"}), 404
+
+            doc = documents[0]
+
+            # 如果有 source_url，都尝试使用 PDF.js 预览
+            if doc.get('source_url'):
+                source_url = doc['source_url']
+                # 尝试使用 PDF.js 预览，让前端处理加载失败的情况
+                return jsonify({
+                    "success": True,
+                    "url": source_url,
+                    "type": "preview"
+                }), 200
+
+            # 否则返回存储桶中的文件URL
+            # 文件名存储在 filename 字段中
+            filename = doc.get('filename')
+            if filename:
+                file_url = get_storage_url(filename)
+                return jsonify({
+                    "success": True,
+                    "url": file_url,
+                    "type": "storage"
+                }), 200
+
+            return jsonify({"error": "No URL available for this document"}), 404
+
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.route('/api/documents/<doc_id>/download', methods=['GET'])
+    def download_document(doc_id):
+        """代理下载文档（解决跨域问题）"""
+        try:
+            # 先获取文档信息
+            params = {"id": f"eq.{doc_id}", "limit": 1}
+            response = supabase_request("GET", "documents", params=params)
+            documents = response.json()
+
+            if not documents:
+                return jsonify({"error": "Document not found"}), 404
+
+            doc = documents[0]
+
+            # 获取文件 URL
+            file_url = None
+            filename = doc.get('filename', 'document.pdf')
+
+            if doc.get('source_url'):
+                file_url = doc['source_url']
+            elif filename:
+                file_url = get_storage_url(filename)
+
+            if not file_url:
+                return jsonify({"error": "No file available"}), 404
+
+            # 通过后端代理下载
+            import requests
+            file_response = requests.get(file_url, timeout=30)
+
+            if file_response.status_code != 200:
+                return jsonify({"error": f"Failed to download: {file_response.status_code}"}), 500
+
+            # 返回文件，添加 CORS 相关头
+            from flask import Response
+            return Response(
+                file_response.content,
+                mimetype='application/pdf',
+                headers={
+                    'Content-Disposition': f'attachment; filename="{filename}"',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type',
+                }
+            )
 
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -160,12 +312,13 @@ def register_document_routes(app):
             if 'folder' in data:
                 update_data['folder'] = data['folder']
 
-            result = supabase.table("documents").update(update_data).eq("id", doc_id).execute()
+            params = {"id": f"eq.{doc_id}"}
+            response = supabase_request("PATCH", "documents", update_data, params)
 
-            if result.data:
+            if response.status_code in [200, 204] or response.json():
                 return jsonify({
                     "success": True,
-                    "document": result.data[0]
+                    "document": response.json()[0] if response.json() else update_data
                 }), 200
             else:
                 return jsonify({"error": "Update failed"}), 500
@@ -178,7 +331,8 @@ def register_document_routes(app):
     def delete_document(doc_id):
         """删除文档索引（文件仍在本地）"""
         try:
-            supabase.table("documents").delete().eq("id", doc_id).execute()
+            params = {"id": f"eq.{doc_id}"}
+            supabase_request("DELETE", "documents", params=params)
 
             return jsonify({
                 "success": True,
@@ -197,6 +351,8 @@ def register_document_routes(app):
         请求参数：
         - url: 文档URL
         - title: 文档标题
+        - folder: 保存到哪个文件夹（可选，默认"其他"）
+        - tags: 标签数组（可选）
         - source_type: 'plugin'（标识来自插件）
         """
         try:
@@ -205,6 +361,8 @@ def register_document_routes(app):
             url = data.get('url')
             title = data.get('title')
             user_id = data.get('user_id', 'default')
+            folder = data.get('folder', '其他')  # 支持指定文件夹
+            tags = data.get('tags', ['网页保存'])   # 支持指定标签
 
             if not url or not title:
                 return jsonify({"error": "URL and title are required"}), 400
@@ -224,24 +382,24 @@ def register_document_routes(app):
                 "filename": filename,
                 "source_url": url,
                 "source_type": "plugin",
-                "tags": ["网页保存"],
-                "folder": "未分类",
+                "tags": tags,
+                "folder": folder,  # 使用指定的文件夹
                 "notes": None,
                 "conversion_history": None,
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat()
             }
 
-            result = supabase.table("documents").insert(document_data).execute()
+            response = supabase_request("POST", "documents", document_data)
 
-            if result.data:
+            if response.status_code in [200, 201]:
                 return jsonify({
                     "success": True,
-                    "document": result.data[0],
-                    "message": "Document indexed (file downloaded to local by browser)"
+                    "document": response.json()[0] if response.json() else document_data,
+                    "message": f"Document saved to folder '{folder}'"
                 }), 200
             else:
-                return jsonify({"error": "Failed to create index"}), 500
+                return jsonify({"error": f"Failed to create index: {response.text}"}), 500
 
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -253,32 +411,45 @@ def register_document_routes(app):
         try:
             user_id = request.args.get('user_id', 'default')
 
-            result = supabase.table("folders").select("*").eq("user_id", user_id).execute()
+            # 测试 Supabase 连接
+            try:
+                params = {"user_id": f"eq.{user_id}"}
+                response = supabase_request("GET", "folders", params=params)
+                folders = response.json()
+            except Exception as e:
+                return jsonify({
+                    "success": False,
+                    "error": f"Supabase连接失败: {str(e)}",
+                    "hint": "请检查网络连接或 Supabase 配置"
+                }), 500
 
-            # 添加默认文件夹
-            folders = result.data
+            # 只使用默认文件夹（按学科领域分类），不显示用户创建的旧文件夹
             default_folders = [
                 {"id": "default", "name": "全部", "count": 0},
-                {"id": "uncategorized", "name": "未分类", "count": 0},
+                {"id": "finance", "name": "金融经济", "count": 0, "color": "#059669"},
+                {"id": "trade", "name": "国际贸易", "count": 0, "color": "#2563EB"},
+                {"id": "international", "name": "国际关系", "count": 0, "color": "#DC2626"},
+                {"id": "law", "name": "法律政策", "count": 0, "color": "#7C3AED"},
+                {"id": "statistics", "name": "统计资料", "count": 0, "color": "#0891B2"},
+                {"id": "other", "name": "其他", "count": 0, "color": "#6B7280"},
             ]
 
             # 统计每个文件夹的文档数
-            docs_result = supabase.table("documents").select("folder").eq("user_id", user_id).execute()
+            docs_params = {"user_id": f"eq.{user_id}", "select": "folder"}
+            docs_response = supabase_request("GET", "documents", params=docs_params)
+            docs = docs_response.json()
+
             folder_counts = {}
-            for doc in docs_result.data:
-                folder = doc.get('folder', '未分类')
+            for doc in docs:
+                folder = doc.get('folder', '其他')
                 folder_counts[folder] = folder_counts.get(folder, 0) + 1
 
             # 更新计数
             for folder in default_folders:
-                if folder['name'] == '未分类':
-                    folder['count'] = folder_counts.get('未分类', 0)
+                if folder['name'] == '其他':
+                    folder['count'] = folder_counts.get('其他', 0)
                 elif folder['name'] == '全部':
                     folder['count'] = sum(folder_counts.values())
-
-            for folder in folders:
-                folder['count'] = folder_counts.get(folder['name'], 0)
-                default_folders.append(folder)
 
             return jsonify({
                 "success": True,
@@ -314,12 +485,12 @@ def register_document_routes(app):
                 "created_at": datetime.now().isoformat()
             }
 
-            result = supabase.table("folders").insert(folder_data).execute()
+            response = supabase_request("POST", "folders", folder_data)
 
-            if result.data:
+            if response.status_code in [200, 201]:
                 return jsonify({
                     "success": True,
-                    "folder": result.data[0]
+                    "folder": response.json()[0]
                 }), 200
             else:
                 return jsonify({"error": "Failed to create folder"}), 500
@@ -334,8 +505,9 @@ def register_document_routes(app):
         try:
             user_id = request.args.get('user_id', 'default')
 
-            result = supabase.table("documents").select("*").eq("user_id", user_id).execute()
-            documents = result.data
+            params = {"user_id": f"eq.{user_id}"}
+            response = supabase_request("GET", "documents", params=params)
+            documents = response.json()
 
             # 统计信息
             stats = {
@@ -346,7 +518,7 @@ def register_document_routes(app):
                     "upload": len([d for d in documents if d.get('source_type') == 'upload'])
                 },
                 "by_type": {},
-                "recent_count": len([d for d in documents if (datetime.now() - datetime.fromisoformat(d['created_at'].replace('Z', '+00:00'))).days < 7])
+                "recent_count": len([d for d in documents if (datetime.now() - datetime.fromisoformat(d['created_at'].replace('Z', '+00:00')).replace(tzinfo=None)).days < 7])
             }
 
             # 按文件类型统计
@@ -357,6 +529,95 @@ def register_document_routes(app):
             return jsonify({
                 "success": True,
                 "stats": stats
+            }), 200
+
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+
+    @app.route('/api/websites', methods=['GET'])
+    def get_websites():
+        """获取用户文档的所有来源网站"""
+        try:
+            user_id = request.args.get('user_id', 'default')
+
+            # 获取所有文档
+            params = {"user_id": f"eq.{user_id}", "select": "source_url"}
+            response = supabase_request("GET", "documents", params=params)
+            documents = response.json()
+
+            # 预定义所有已知网站（包含没有文档的）
+            known_websites = [
+                {'key': 'worldbank.org', 'name': '世界银行'},
+                {'key': 'imf.org', 'name': 'IMF国际货币基金组织'},
+                {'key': 'un.org', 'name': '联合国'},
+                {'key': 'unea', 'name': '联合国非洲经济委员会'},
+                {'key': 'uneca', 'name': '联合国非洲经济委员会'},
+                {'key': 'afdb.org', 'name': '非洲开发银行'},
+                {'key': 'wto.org', 'name': 'WTO世贸组织'},
+                {'key': 'oecd.org', 'name': 'OECD经合组织'},
+                {'key': 'nielsen.com', 'name': 'Nielsen尼尔森'},
+                {'key': 'mckinsey.com', 'name': '麦肯锡'},
+                {'key': 'bcg.com', 'name': '波士顿咨询'},
+                {'key': 'bain.com', 'name': '贝恩咨询'},
+                {'key': 'centralbank.gov.cn', 'name': '中国人民银行'},
+                {'key': 'stats.gov.cn', 'name': '国家统计局'},
+            ]
+
+            # 网站映射用于匹配
+            website_match_map = {
+                'worldbank.org': 'worldbank.org',
+                'wb': 'worldbank.org',
+                'imf.org': 'imf.org',
+                'un.org': 'un.org',
+                'unea': 'unea',
+                'uneca': 'uneca',
+                'afdb.org': 'afdb.org',
+                'africandevelopmentbank': 'afdb.org',
+                'wto.org': 'wto.org',
+                'oecd.org': 'oecd.org',
+                'nielsen.com': 'nielsen.com',
+                'mckinsey.com': 'mckinsey.com',
+                'bcg.com': 'bcg.com',
+                'bain.com': 'bain.com',
+                'centralbank.gov.cn': 'centralbank.gov.cn',
+                'pbc.gov.cn': 'centralbank.gov.cn',
+                'stats.gov.cn': 'stats.gov.cn',
+            }
+
+            # 统计每个网站的文档数
+            website_counts = {w['key']: 0 for w in known_websites}
+
+            for doc in documents:
+                source_url = doc.get('source_url')
+                if source_url:
+                    try:
+                        url_obj = __import__('urllib.parse', fromlist=['urlparse']).urlparse(source_url)
+                        hostname = url_obj.netloc.lower().replace('www.', '')
+
+                        # 查找匹配
+                        for key, info_key in website_match_map.items():
+                            if key in hostname:
+                                website_counts[info_key] = website_counts.get(info_key, 0) + 1
+                                break
+                    except:
+                        pass
+
+            # 构建网站列表（包含0个文档的）
+            website_list = []
+            for w in known_websites:
+                website_list.append({
+                    "id": w['key'],
+                    "name": w['name'],
+                    "count": website_counts.get(w['key'], 0)
+                })
+
+            # 按数量排序
+            website_list.sort(key=lambda x: x['count'], reverse=True)
+
+            return jsonify({
+                "success": True,
+                "websites": website_list
             }), 200
 
         except Exception as e:

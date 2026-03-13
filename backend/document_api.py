@@ -242,13 +242,15 @@ def register_document_routes(app):
 
     @app.route('/api/plugin/save', methods=['POST'])
     def plugin_save_document():
-        """浏览器插件保存文档接口"""
+        """浏览器插件保存文档接口（支持指定文件夹）"""
         try:
             data = request.get_json()
 
             url = data.get('url')
             user_id = data.get('user_id', 'default')
             title = data.get('title', 'Document')
+            folder = data.get('folder', '未分类')  # 支持指定文件夹
+            tags = data.get('tags', [])  # 支持指定标签
 
             if not url:
                 return jsonify({"error": "URL is required"}), 400
@@ -307,6 +309,9 @@ def register_document_routes(app):
                     "file_size": file_size,
                     "file_type": file_ext,
                     "source_url": url,
+                    "source_type": "plugin",  # 标记为插件来源
+                    "folder": folder,  # 使用指定的文件夹
+                    "tags": tags,  # 使用指定的标签
                     "metadata": "{}",
                     "created_at": datetime.now().isoformat(),
                     "updated_at": datetime.now().isoformat()
