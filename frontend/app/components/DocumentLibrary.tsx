@@ -556,7 +556,7 @@ export function DocumentLibrary() {
 
       {/* 快捷链接 */}
       <div className="bg-card border border-border rounded-xl p-6 mb-6">
-        <h3 className="text-lg font-medium text-foreground mb-4">国际经济组织</h3>
+        <h3 className="text-lg font-medium text-foreground mb-4">报告来源</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <a
             href="https://www.un.org/zh/aboutun/structure/uneca/"

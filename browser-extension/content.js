@@ -1,13 +1,24 @@
 // Content Script - 文献助手 PDF 检测
-console.log('📚 文献助手已加载');
-
-// 防止重复初始化
-if (window.__literatureHelperInitialized) {
-  console.log('📚 已初始化，跳过');
-} else {
+(function() {
+  // 防止重复初始化
+  if (window.__literatureHelperInitialized) return;
   window.__literatureHelperInitialized = true;
 
-  const DOWNLOAD_TEXTS = ['下载', 'download', '导出', 'export', '保存', 'save', 'pdf', '全文', 'full text'];
+  // 检查扩展是否可用
+  function isExtensionAvailable() {
+    try {
+      return chrome && chrome.runtime && chrome.runtime.id;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // 如果扩展不可用，静默退出
+  if (!isExtensionAvailable()) {
+    return;
+  }
+
+  console.log('📚 文献助手已加载');
 
   // 简化版检测函数 - 只检测真正的PDF
   function detectPDFs() {
@@ -55,30 +66,36 @@ if (window.__literatureHelperInitialized) {
   // 初始化检测 - 只运行一次，不持续监听
   setTimeout(detectPDFs, 500);
 
-  // 监听来自popup的消息
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'getMarkedLinks') {
-      // 获取已标记的链接
-      const marked = document.querySelectorAll('[data-literature-marked]');
-      const links = [];
+  // 监听来自popup的消息 - 添加错误处理
+  if (chrome && chrome.runtime && chrome.runtime.onMessage) {
+    chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+      try {
+        if (request.action === 'getMarkedLinks') {
+          // 获取已标记的链接
+          const marked = document.querySelectorAll('[data-literature-marked]');
+          const links = [];
 
-      marked.forEach(el => {
-        const href = el.href || el.getAttribute('data-url') || el.getAttribute('data-pdf');
-        if (href) {
-          const title = el.textContent.trim() || el.title || href.split('/').pop();
-          links.push({
-            url: href,
-            title: title,
-            type: 'PDF链接',
-            confidence: 'high'
+          marked.forEach(el => {
+            const href = el.href || el.getAttribute('data-url') || el.getAttribute('data-pdf');
+            if (href) {
+              const title = el.textContent.trim() || el.title || href.split('/').pop();
+              links.push({
+                url: href,
+                title: title,
+                type: 'PDF链接',
+                confidence: 'high'
+              });
+            }
           });
-        }
-      });
 
-      sendResponse({ links: links });
-    }
-    return true;
-  });
+          sendResponse({ links: links });
+        }
+      } catch (e) {
+        // 静默处理错误
+      }
+      return true;
+    });
+  }
 
   console.log('📚 文献助手已启动');
-}
+})();

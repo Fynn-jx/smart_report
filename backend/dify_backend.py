@@ -66,6 +66,19 @@ try:
 except Exception as e:
     print(f"[WARN] Document API not available: {e}")
 
+# 导入文本切片模块
+try:
+    from text_splitter import (
+        process_long_document,
+        split_chinese_text,
+        extract_text_from_url
+    )
+    TEXT_SPLITTER_ENABLED = True
+    write_log("[OK] Text splitter module enabled")
+except Exception as e:
+    TEXT_SPLITTER_ENABLED = False
+    print(f"[WARN] Text splitter not available: {e}")
+
 
 # ============= 反馈功能 =============
 
@@ -180,6 +193,31 @@ class DifyAPIClient:
             return None
         except Exception as e:
             write_log(f"  文件上传异常: {e}")
+            return None
+
+    def download_file(self, file_id):
+        """
+        下载Dify上传的文件
+        file_id: Dify文件ID
+        返回: 文件内容的bytes
+        """
+        try:
+            # 调用Dify的文件信息接口获取下载URL
+            files_url = f"{self.base_url}/files/{file_id}"
+            response = requests.get(files_url, headers=self.headers, timeout=30)
+
+            if response.status_code == 200:
+                file_info = response.json()
+                # 获取下载URL
+                download_url = file_info.get('download_url') or file_info.get('url')
+                if download_url:
+                    # 下载文件内容
+                    file_response = requests.get(download_url, timeout=60)
+                    if file_response.status_code == 200:
+                        return file_response.content
+            return None
+        except Exception as e:
+            write_log(f"下载Dify文件失败: {e}")
             return None
 
     def run_workflow_blocking(self, workflow_inputs, user="", max_retries=3):
@@ -1691,6 +1729,228 @@ def get_feedback_stats_supabase():
 
 
 # ======================================
+# 切片转换 API
+# ======================================
+
+@app.route('/api/dify/convert/chunked', methods=['POST'])
+def convert_to_official_chunked():
+    """
+    切片转公文API - 适用于长文档
+    前端传入:
+    - file_url: PDF文件的URL地址（可选）
+    - file_id: Dify上传后的文件ID（可选，与file_url二选一）
+    - chunk_size: 每个切片的大小（默认3000字符）
+    - chunk_overlap: 相邻切片的重叠大小（默认300字符）
+    - output_format: 输出格式
+    - auto_process: 是否自动处理切片（默认false，返回切片信息）
+    """
+    try:
+        data = request.get_json()
+        file_url = data.get('file_url')
+        file_id = data.get('file_id')  # Dify文件ID
+        user = data.get('user', 'default')
+        output_format = data.get('output_format', 'docx')
+        chunk_size = data.get('chunk_size', 3000)
+        chunk_overlap = data.get('chunk_overlap', 300)
+        auto_process = data.get('auto_process', False)
+
+        # 需要提供file_url或file_id之一
+        if not file_url and not file_id:
+            return jsonify({"error": "file_url or file_id is required"}), 400
+
+        write_log(f"\n{'='*60}")
+        if file_url:
+            write_log(f"切片转公文请求: url={file_url}")
+        else:
+            write_log(f"切片转公文请求: file_id={file_id}")
+        write_log(f"切片参数: chunk_size={chunk_size}, overlap={chunk_overlap}, auto_process={auto_process}")
+
+        if not TEXT_SPLITTER_ENABLED:
+            return jsonify({
+                "error": "Text splitter module not available. Please install langchain and pdfplumber."
+            }), 500
+
+        # 1. 下载PDF并提取文本
+        write_log("步骤1: 下载PDF并提取文本...")
+
+        # 获取文件内容
+        file_content = None
+        if file_url:
+            # 从URL下载
+            full_text = extract_text_from_url(file_url)
+        elif file_id:
+            # 从Dify文件ID下载
+            try:
+                # 调用Dify的文件下载接口
+                client = init_dify_client()
+                file_content = client.download_file(file_id)
+                if file_content:
+                    full_text = extract_text_from_pdf(file_content)
+                else:
+                    full_text = ""
+            except Exception as e:
+                write_log(f"从Dify下载文件失败: {e}")
+                full_text = ""
+        else:
+            full_text = ""
+
+        if not full_text:
+            return jsonify({"error": "无法提取PDF文本"}), 500
+
+        write_log(f"提取文本长度: {len(full_text)} 字符")
+
+        # 2. 切片
+        write_log("步骤2: 文本切片...")
+        chunks = split_chinese_text(full_text, chunk_size, chunk_overlap)
+        write_log(f"切片数量: {len(chunks)}")
+
+        if not chunks:
+            return jsonify({"error": "文本切片失败"}), 500
+
+        # 3. 如果只有一个切片，返回信息让前端使用普通API
+        if len(chunks) == 1:
+            write_log("文本较短，使用普通模式处理")
+            return jsonify({
+                "success": True,
+                "mode": "single",
+                "text": full_text,
+                "chunks": chunks,
+                "chunk_count": len(chunks),
+                "message": "文本已提取，请使用普通API处理短文本"
+            })
+
+        # 4. 如果auto_process为true，自动上传Dify处理
+        if auto_process:
+            write_log(f"步骤3: 自动上传 {len(chunks)} 个切片到Dify处理...")
+
+            client = init_dify_client()
+            all_results = []
+            combined_text = ""
+
+            import tempfile
+            import io
+
+            for i, chunk in enumerate(chunks):
+                write_log(f"  处理切片 {i+1}/{len(chunks)} (长度: {len(chunk)})")
+
+                try:
+                    # 将切片保存为临时文本文件
+                    temp_file = io.BytesIO(chunk.encode('utf-8'))
+                    temp_file.name = f'chunk_{i+1}.txt'
+
+                    # 上传到Dify
+                    file_id = client.upload_file(temp_file, user)
+                    if not file_id:
+                        write_log(f"    切片 {i+1} 上传失败，跳过")
+                        continue
+
+                    write_log(f"    切片 {i+1} 上传成功，file_id: {file_id}")
+
+                    # 调用workflow处理
+                    workflow_inputs = {
+                        "wenjian": {
+                            "type": "document",
+                            "transfer_method": "local_file",
+                            "upload_file_id": file_id
+                        }
+                    }
+
+                    result = client.run_workflow_blocking(workflow_inputs, user)
+                    if result:
+                        # 提取结果文本
+                        outputs = result.get('outputs', {})
+                        # 根据Dify返回的实际结构提取文本
+                        text_result = outputs.get('text', '') or outputs.get('result', '') or str(outputs)
+                        all_results.append(text_result)
+                        combined_text += f"\n\n--- 第{i+1}部分 ---\n\n" + text_result
+                        write_log(f"    切片 {i+1} 处理完成")
+                    else:
+                        write_log(f"    切片 {i+1} 处理失败")
+
+                except Exception as e:
+                    write_log(f"    切片 {i+1} 处理异常: {e}")
+                    continue
+
+            write_log(f"切片处理完成，成功处理 {len(all_results)}/{len(chunks)} 个切片")
+
+            return jsonify({
+                "success": True,
+                "mode": "auto_chunked",
+                "chunk_count": len(chunks),
+                "processed_count": len(all_results),
+                "results": all_results,
+                "combined_text": combined_text,
+                "message": f"成功处理 {len(all_results)}/{len(chunks)} 个切片"
+            })
+
+        # 5. 否则返回切片信息，让前端决定如何处理
+        write_log(f"步骤3: 返回 {len(chunks)} 个切片信息（不自动处理）")
+
+        results = []
+        for i, chunk in enumerate(chunks):
+            results.append({
+                "chunk_index": i + 1,
+                "chunk_text": chunk[:500] + "..." if len(chunk) > 500 else chunk,
+                "chunk_length": len(chunk)
+            })
+
+        return jsonify({
+            "success": True,
+            "mode": "chunked",
+            "full_text_length": len(full_text),
+            "chunks_preview": results,
+            "chunk_count": len(chunks),
+            "message": f"文档已切片为 {len(chunks)} 个部分"
+        })
+
+    except Exception as e:
+        write_log(f"切片转公文异常: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/dify/convert/text-chunked', methods=['POST'])
+def convert_text_chunked():
+    """
+    直接传入文本进行切片转换（适用于已提取文本的情况）
+    前端传入:
+    - text: 要转换的文本
+    - chunk_size: 切片大小
+    - chunk_overlap: 重叠大小
+    """
+    try:
+        data = request.get_json()
+        text = data.get('text')
+        user = data.get('user', 'default')
+        chunk_size = data.get('chunk_size', 3000)
+        chunk_overlap = data.get('chunk_overlap', 300)
+
+        if not text:
+            return jsonify({"error": "text is required"}), 400
+
+        write_log(f"\n{'='*60}")
+        write_log(f"文本切片请求: 文本长度={len(text)}")
+
+        if not TEXT_SPLITTER_ENABLED:
+            return jsonify({
+                "error": "Text splitter module not available"
+            }), 500
+
+        # 切片
+        chunks = split_chinese_text(text, chunk_size, chunk_overlap)
+
+        return jsonify({
+            "success": True,
+            "text_length": len(text),
+            "chunks": chunks,
+            "chunk_count": len(chunks),
+            "chunk_size": chunk_size,
+            "chunk_overlap": chunk_overlap
+        })
+
+    except Exception as e:
+        write_log(f"文本切片异常: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 def main():
     """启动 Flask 服务器"""
@@ -1704,6 +1964,8 @@ def main():
     print("  - GET  /health - 健康检查")
     print("  - POST /api/dify/upload - 上传文档")
     print("  - POST /api/dify/convert - 转公文")
+    print("  - POST /api/dify/convert/chunked - 切片转公文（长文档）")
+    print("  - POST /api/dify/convert/text-chunked - 文本切片")
     print("  - POST /api/dify/country-report - 生成国别情况报告")
     print("  - POST /api/dify/quarterly-report - 生成季度研究报告")
     print("  - POST /api/dify/translate-document - 文档翻译")

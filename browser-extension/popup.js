@@ -1,6 +1,52 @@
 // 配置
 const API_BASE_URL = 'http://localhost:5000';
 
+// 文献库地址配置
+const LIBRARY_URLS = {
+  development: 'http://localhost:5173',
+  production: 'https://smartdocx.jxchen.me'
+};
+
+// 获取当前应该使用的文献库地址
+function getLibraryUrl() {
+  // 从 localStorage 读取用户设置的文献库地址
+  const savedUrl = localStorage.getItem('libraryUrl');
+  if (savedUrl) {
+    return savedUrl;
+  }
+
+  // 检查当前标签页的域名
+  return new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs && tabs[0] && tabs[0].url) {
+        const url = new URL(tabs[0].url);
+        // 如果当前页面是 localhost 或 127.0.0.1，使用开发环境地址
+        if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+          resolve(LIBRARY_URLS.development);
+          return;
+        }
+      }
+      // 默认使用生产环境地址
+      resolve(LIBRARY_URLS.production);
+    });
+  });
+}
+
+// 初始化文献库链接
+async function initLibraryLink() {
+  const libraryLink = document.querySelector('.footer a');
+  if (libraryLink) {
+    const url = await getLibraryUrl();
+    libraryLink.href = url;
+  }
+}
+
+// 初始化
+document.addEventListener('DOMContentLoaded', async () => {
+  await initLibraryLink();
+  initPDFDetection();
+});
+
 // 全局状态
 let savedDocs = [];
 let detectedResults = [];

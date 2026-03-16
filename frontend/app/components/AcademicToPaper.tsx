@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Upload, FileText, Loader2, Download, CheckCircle2, X, Languages, FileEdit } from 'lucide-react';
+import { Upload, FileText, Loader2, Download, CheckCircle2, X, Languages, FileEdit, Scissors, FileCheck } from 'lucide-react';
 import { StyleSelectionModal } from '@/components/Selection';
 import { ReferenceFileUpload } from '@/components/ReferenceFileUpload';
 import { getApiConfig } from '@/config/api';
@@ -138,6 +138,11 @@ export function AcademicToPaper({ preselectedFileId, preselectedOperation, onFil
   const [fileId, setFileId] = useState<string | null>(null);
   const [showStyleModal, setShowStyleModal] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState<string>('style1');
+  const [showChunkingModal, setShowChunkingModal] = useState(false);
+  const [useChunking, setUseChunking] = useState(false);
+  const [pendingStyle, setPendingStyle] = useState<string>('');
+  const [chunkPreview, setChunkPreview] = useState<{chunks: string[], chunkCount: number} | null>(null);
+  const [isChunking, setIsChunking] = useState(false);
   const [referenceFileIds, setReferenceFileIds] = useState<string[]>([]);
   const [selectedOperation, setSelectedOperation] = useState<OperationType | null>(null);
   const [preselectedLoading, setPreselectedLoading] = useState(false);
@@ -222,6 +227,59 @@ export function AcademicToPaper({ preselectedFileId, preselectedOperation, onFil
   const handleOperation = async (type: OperationType) => {
     if (!file) return;
 
+    // 如果是转公文且启用了切片模式，先切片预览
+    if (type === 'rewrite' && useChunking) {
+      setIsChunking(true);
+      try {
+        // 提取文件文本
+        const fileText = await extractTextFromFile(file);
+
+        if (!fileText || fileText.length < 100) {
+          alert('无法提取文档内容或文档内容太少');
+          setIsChunking(false);
+          return;
+        }
+
+        // 调用切片API
+        const chunkResponse = await fetch(
+          apiConfig.TEXT_CHUNKED_URL || `${apiConfig.BASE_URL}/api/dify/convert/text-chunked`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text: fileText,
+              chunk_size: 3000,
+              chunk_overlap: 300,
+            }),
+          }
+        );
+
+        if (!chunkResponse.ok) {
+          throw new Error('文档切片失败');
+        }
+
+        const chunkResult = await chunkResponse.json();
+
+        if (!chunkResult.success || !chunkResult.chunks) {
+          throw new Error('无法处理文档');
+        }
+
+        // 显示切片预览
+        setChunkPreview({
+          chunks: chunkResult.chunks,
+          chunkCount: chunkResult.chunk_count,
+        });
+        setShowChunkingModal(true);
+        setIsChunking(false);
+      } catch (err) {
+        console.error('切片失败:', err);
+        alert('切片失败: ' + (err as Error).message);
+        setIsChunking(false);
+      }
+      return;
+    }
+
+    // 普通模式或翻译模式
     if (type === 'rewrite') {
       setShowStyleModal(true);
       return;
@@ -449,7 +507,7 @@ export function AcademicToPaper({ preselectedFileId, preselectedOperation, onFil
             user: 'default',
             output_format: 'docx',
             style: style,
-            reference_files: referenceFileIds, // 添加参考文件ID列表
+            reference_files: referenceFileIds,
           }),
         });
 
@@ -481,6 +539,45 @@ export function AcademicToPaper({ preselectedFileId, preselectedOperation, onFil
       );
       console.error('处理失败:', error);
     }
+  };
+
+  // 从PDF文件提取文本
+  const extractTextFromFile = async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const arrayBuffer = e.target?.result as ArrayBuffer;
+          // 使用动态导入pdfjs-dist
+          const pdfjsLib = await import('pdfjs-dist');
+          pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          let fullText = '';
+
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items
+              .map((item: any) => item.str)
+              .join(' ');
+            fullText += pageText + '\n\n';
+          }
+
+          resolve(fullText);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  // 确认切片并继续转公文
+  const handleConfirmChunking = () => {
+    setShowChunkingModal(false);
+    setShowStyleModal(true);
   };
 
   const handleDownload = (result: string, type: OperationType) => {
@@ -560,6 +657,27 @@ export function AcademicToPaper({ preselectedFileId, preselectedOperation, onFil
             <p className="mb-2 text-foreground">点击上传文件</p>
             <p className="text-muted-foreground">支持 PDF、Word 格式</p>
           </label>
+
+          {/* 切片选项 */}
+          <div className="mt-6 p-4 rounded-xl border-2 border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={useChunking}
+                onChange={(e) => setUseChunking(e.target.checked)}
+                className="mt-1 w-5 h-5 rounded border-orange-300 text-orange-600 focus:ring-orange-500"
+              />
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <Scissors className="w-4 h-4 text-orange-600" />
+                  <span className="font-medium text-orange-700 dark:text-orange-300">启用文档切片</span>
+                </div>
+                <p className="text-sm text-orange-600/70 dark:text-orange-400/70 mt-1">
+                  适用于长文档（超过50页），处理前先预览切片内容
+                </p>
+              </div>
+            </label>
+          </div>
         </div>
       )}
 
@@ -771,6 +889,88 @@ export function AcademicToPaper({ preselectedFileId, preselectedOperation, onFil
         onSelect={handleStyleSelect}
         onClose={() => setShowStyleModal(false)}
       />
+
+      {/* 切片预览弹窗 */}
+      {showChunkingModal && chunkPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setShowChunkingModal(false)}
+          />
+          <div className="relative w-full max-w-4xl max-h-[80vh] bg-card rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            {/* 头部 */}
+            <div className="border-b border-border px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900 flex items-center justify-center">
+                  <Scissors className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <h3 className="text-foreground font-semibold">文档切片预览</h3>
+                  <p className="text-sm text-muted-foreground">
+                    文档已切片为 {chunkPreview.chunkCount} 个部分
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowChunkingModal(false)}
+                className="w-8 h-8 rounded-lg hover:bg-accent transition-colors flex items-center justify-center"
+              >
+                <X className="w-5 h-5 text-muted-foreground" />
+              </button>
+            </div>
+
+            {/* 切片列表 */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {chunkPreview.chunks.map((chunk, index) => (
+                <div
+                  key={index}
+                  className="p-4 rounded-xl border border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <FileCheck className="w-4 h-4 text-orange-600" />
+                    <span className="font-medium text-orange-700 dark:text-orange-300">
+                      第 {index + 1} 部分
+                    </span>
+                    <span className="text-sm text-orange-500">
+                      ({chunk.length} 字符)
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground line-clamp-4">
+                    {chunk}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* 底部按钮 */}
+            <div className="border-t border-border px-6 py-4 flex gap-3 justify-end">
+              <button
+                onClick={() => setShowChunkingModal(false)}
+                className="px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleConfirmChunking}
+                className="px-4 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 transition-colors flex items-center gap-2"
+              >
+                <FileEdit className="w-4 h-4" />
+                继续转公文
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 切片中提示 */}
+      {isChunking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-card rounded-xl p-6 flex items-center gap-4">
+            <Loader2 className="w-6 h-6 text-orange-600 animate-spin" />
+            <span className="text-foreground">正在切片文档...</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
